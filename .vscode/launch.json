@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "type": "chrome", // Usa o Chrome para debug
+        "request": "launch",
+        "name": "Debug React App",
+        "url": "http://localhost:3000", // Porta onde o app roda
+        "webRoot": "${workspaceFolder}/src",
+        "sourceMaps": true,
+        "skipFiles": ["node_modules/**"],
+        "runtimeArgs": ["--remote-debugging-port=9222"]
+      }
+    ]
+  }
+  

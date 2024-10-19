@@ -10,12 +10,15 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 
 // third-party
 import { NumericFormat } from 'react-number-format';
 
 // project import
 import Dot from 'components/@extended/Dot';
+
 
 function createData(tracking_no, name, fat, carbs, protein) {
   return { tracking_no, name, fat, carbs, protein };
@@ -33,7 +36,7 @@ const rows = [
   createData(98753275, 'Desktop', 185, 1, 98063),
   createData(98753291, 'Chair', 100, 0, 14001)
 ];
-
+  
 function descendingComparator(a, b, orderBy) {
   if (b[orderBy] < a[orderBy]) {
     return -1;
@@ -62,35 +65,28 @@ function stableSort(array, comparator) {
 
 const headCells = [
   {
-    id: 'tracking_no',
+    id: 'sku',
     align: 'left',
     disablePadding: false,
-    label: 'Tracking No.'
+    label: 'SKU'
   },
   {
-    id: 'name',
+    id: 'productName',
     align: 'left',
-    disablePadding: true,
-    label: 'Product Name'
+    disablePadding: false,
+    label: 'Nome do produto'
   },
   {
-    id: 'fat',
+    id: 'price',
     align: 'right',
     disablePadding: false,
-    label: 'Total Order'
+    label: 'Preço por unidade'
   },
   {
-    id: 'carbs',
+    id: 'quantity',
     align: 'left',
     disablePadding: false,
-
-    label: 'Status'
-  },
-  {
-    id: 'protein',
-    align: 'right',
-    disablePadding: false,
-    label: 'Total Amount'
+    label: 'Quantidade'
   }
 ];
 
@@ -148,6 +144,28 @@ function OrderStatus({ status }) {
 // ==============================|| ORDER TABLE ||============================== //
 
 export default function OrderTable() {
+
+  const [orders, setOrders] = useState([]);  // Estado para armazenar os pedidos
+  const [loading, setLoading] = useState(true);  // Estado de carregamento
+  const [error, setError] = useState(null);  // Estado de erro
+
+  // useEffect para buscar dados quando o componente for montado
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const response = await axios.get('http://localhost:5001/api/orders/db');  // URL da sua API
+        console.log(response.data)
+        setOrders(response.data);  // Armazena os dados no estado
+        setLoading(false);  // Finaliza o estado de carregamento
+      } catch (err) {
+        setError('Erro ao carregar os dados');
+        setLoading(false);  // Finaliza o estado de carregamento em caso de erro
+      }
+    };
+
+    fetchOrders();  // Chama a função ao montar o componente
+  }, []);
+
   const order = 'asc';
   const orderBy = 'tracking_no';
 
@@ -166,7 +184,7 @@ export default function OrderTable() {
         <Table aria-labelledby="tableTitle">
           <OrderTableHead order={order} orderBy={orderBy} />
           <TableBody>
-            {stableSort(rows, getComparator(order, orderBy)).map((row, index) => {
+            {stableSort(orders, getComparator(order, orderBy)).map((order, index) => {
               const labelId = `enhanced-table-checkbox-${index}`;
 
               return (
@@ -175,19 +193,14 @@ export default function OrderTable() {
                   role="checkbox"
                   sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                   tabIndex={-1}
-                  key={row.tracking_no}
+                  key={order.sku}
                 >
                   <TableCell component="th" id={labelId} scope="row">
-                    <Link color="secondary"> {row.tracking_no}</Link>
+                    <Link color="secondary"> {order.sku}</Link>
                   </TableCell>
-                  <TableCell>{row.name}</TableCell>
-                  <TableCell align="right">{row.fat}</TableCell>
-                  <TableCell>
-                    <OrderStatus status={row.carbs} />
-                  </TableCell>
-                  <TableCell align="right">
-                    <NumericFormat value={row.protein} displayType="text" thousandSeparator prefix="$" />
-                  </TableCell>
+                  <TableCell>{order.itemName}</TableCell>
+                  <TableCell align="right">{order.itemPrice}</TableCell>
+                  <TableCell>{order.quantity}</TableCell>
                 </TableRow>
               );
             })}

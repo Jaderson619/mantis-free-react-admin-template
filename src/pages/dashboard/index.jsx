@@ -99,7 +99,7 @@ export default function DashboardDefault() {
       <Grid item xs={12} md={7} lg={8}>
         <Grid container alignItems="center" justifyContent="space-between">
           <Grid item>
-            <Typography variant="h5">Recent Orders</Typography>
+            <Typography variant="h5">Produtos comprados recentemente</Typography>
           </Grid>
           <Grid item />
         </Grid>
