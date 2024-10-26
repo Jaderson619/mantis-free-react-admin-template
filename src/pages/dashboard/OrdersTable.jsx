@@ -1,7 +1,6 @@
 import PropTypes from 'prop-types';
 // material-ui
 import Link from '@mui/material/Link';
-import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -13,30 +12,9 @@ import Box from '@mui/material/Box';
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
-// third-party
-import { NumericFormat } from 'react-number-format';
-
 // project import
 import Dot from 'components/@extended/Dot';
 
-
-function createData(tracking_no, name, fat, carbs, protein) {
-  return { tracking_no, name, fat, carbs, protein };
-}
-
-const rows = [
-  createData(84564564, 'Camera Lens', 40, 2, 40570),
-  createData(98764564, 'Laptop', 300, 0, 180139),
-  createData(98756325, 'Mobile', 355, 1, 90989),
-  createData(98652366, 'Handset', 50, 1, 10239),
-  createData(13286564, 'Computer Accessories', 100, 1, 83348),
-  createData(86739658, 'TV', 99, 0, 410780),
-  createData(13256498, 'Keyboard', 125, 2, 70999),
-  createData(98753263, 'Mouse', 89, 2, 10570),
-  createData(98753275, 'Desktop', 185, 1, 98063),
-  createData(98753291, 'Chair', 100, 0, 14001)
-];
-  
 function descendingComparator(a, b, orderBy) {
   if (b[orderBy] < a[orderBy]) {
     return -1;
@@ -48,7 +26,9 @@ function descendingComparator(a, b, orderBy) {
 }
 
 function getComparator(order, orderBy) {
-  return order === 'desc' ? (a, b) => descendingComparator(a, b, orderBy) : (a, b) => -descendingComparator(a, b, orderBy);
+  return order === 'desc'
+    ? (a, b) => descendingComparator(a, b, orderBy)
+    : (a, b) => -descendingComparator(a, b, orderBy);
 }
 
 function stableSort(array, comparator) {
@@ -64,30 +44,20 @@ function stableSort(array, comparator) {
 }
 
 const headCells = [
-  {
-    id: 'sku',
-    align: 'left',
-    disablePadding: false,
-    label: 'SKU'
-  },
-  {
-    id: 'productName',
-    align: 'left',
-    disablePadding: false,
-    label: 'Nome do produto'
-  },
-  {
-    id: 'price',
-    align: 'right',
-    disablePadding: false,
-    label: 'Preço por unidade'
-  },
-  {
-    id: 'quantity',
-    align: 'left',
-    disablePadding: false,
-    label: 'Quantidade'
-  }
+  { id: 'orderId', align: 'left', disablePadding: false, label: 'Order ID' },
+  { id: 'orderDate', align: 'right', disablePadding: false, label: 'Data da venda' },
+  { id: 'productName', align: 'left', disablePadding: false, label: 'Nome do produto' },
+  { id: 'sku', align: 'left', disablePadding: false, label: 'SKU' },
+  { id: 'unitPrice', align: 'right', disablePadding: false, label: 'Preço por unidade' },
+  { id: 'quantity', align: 'left', disablePadding: false, label: 'Quantidade' },
+  { id: 'revenue', align: 'left', disablePadding: false, label: 'Receita (T)' },
+  { id: 'cost', align: 'left', disablePadding: false, label: 'Custo (-)' },
+  { id: 'governmentTax', align: 'left', disablePadding: false, label: 'Imposto (-)' },
+  { id: 'salesTax', align: 'left', disablePadding: false, label: 'Tarifa de venda (-)' },
+  { id: 'shippingBuyer', align: 'left', disablePadding: false, label: 'Frete comprador (-)' },
+  { id: 'shippingSeller', align: 'left', disablePadding: false, label: 'Frete seller (-)' },
+  { id: 'contributionMargin', align: 'left', disablePadding: false, label: 'Margem contribuição (=)' },
+  { id: 'cmPercentage', align: 'left', disablePadding: false, label: 'MC em %' }
 ];
 
 // ==============================|| ORDER TABLE - HEADER ||============================== //
@@ -111,63 +81,44 @@ function OrderTableHead({ order, orderBy }) {
   );
 }
 
-function OrderStatus({ status }) {
-  let color;
-  let title;
-
-  switch (status) {
-    case 0:
-      color = 'warning';
-      title = 'Pending';
-      break;
-    case 1:
-      color = 'success';
-      title = 'Approved';
-      break;
-    case 2:
-      color = 'error';
-      title = 'Rejected';
-      break;
-    default:
-      color = 'primary';
-      title = 'None';
-  }
-
-  return (
-    <Stack direction="row" spacing={1} alignItems="center">
-      <Dot color={color} />
-      <Typography>{title}</Typography>
-    </Stack>
-  );
-}
-
 // ==============================|| ORDER TABLE ||============================== //
 
 export default function OrderTable() {
-
-  const [orders, setOrders] = useState([]);  // Estado para armazenar os pedidos
-  const [loading, setLoading] = useState(true);  // Estado de carregamento
-  const [error, setError] = useState(null);  // Estado de erro
+  const [orders, setOrders] = useState([]); // Estado para armazenar os pedidos
+  const [loading, setLoading] = useState(true); // Estado de carregamento
+  const [error, setError] = useState(null); // Estado de erro
 
   // useEffect para buscar dados quando o componente for montado
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const response = await axios.get('http://localhost:5001/api/orders/db');  // URL da sua API
-        console.log(response.data)
-        setOrders(response.data);  // Armazena os dados no estado
-        setLoading(false);  // Finaliza o estado de carregamento
+        const response = await axios.get('http://localhost:5001/api/orders/db'); // URL da sua API
+        setOrders(response.data.orders || []); // Armazena os dados em "orders" ou um array vazio
+        setLoading(false); // Finaliza o estado de carregamento
       } catch (err) {
         setError('Erro ao carregar os dados');
-        setLoading(false);  // Finaliza o estado de carregamento em caso de erro
+        setLoading(false); // Finaliza o estado de carregamento em caso de erro
       }
     };
 
-    fetchOrders();  // Chama a função ao montar o componente
+    fetchOrders(); // Chama a função ao montar o componente
   }, []);
 
   const order = 'asc';
-  const orderBy = 'tracking_no';
+  const orderBy = 'orderId';
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  // Renderizar o estado de carregamento
+  if (loading) return <Box>Carregando...</Box>;
+
+  // Renderizar o estado de erro
+  if (error) return <Box>{error}</Box>;
 
   return (
     <Box>
@@ -184,26 +135,29 @@ export default function OrderTable() {
         <Table aria-labelledby="tableTitle">
           <OrderTableHead order={order} orderBy={orderBy} />
           <TableBody>
-            {stableSort(orders, getComparator(order, orderBy)).map((order, index) => {
-              const labelId = `enhanced-table-checkbox-${index}`;
-
-              return (
-                <TableRow
-                  hover
-                  role="checkbox"
-                  sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                  tabIndex={-1}
-                  key={order.sku}
-                >
-                  <TableCell component="th" id={labelId} scope="row">
-                    <Link color="secondary"> {order.sku}</Link>
-                  </TableCell>
-                  <TableCell>{order.itemName}</TableCell>
-                  <TableCell align="right">{order.itemPrice}</TableCell>
-                  <TableCell>{order.quantity}</TableCell>
-                </TableRow>
-              );
-            })}
+            {Array.isArray(orders) &&
+              stableSort(orders, getComparator(order, orderBy)).map((orderList) => (
+                orderList.orderItems.map((item, itemIndex) => (
+                  <TableRow key={`${orderList.orderId}-${itemIndex}`} hover role="checkbox">
+                    <TableCell>{orderList.orderId}</TableCell>
+                    <TableCell align="right">{new Date(orderList.date).toLocaleDateString()}</TableCell>
+                    <TableCell>{item.productName}</TableCell>
+                    <TableCell>
+                      <Link color="secondary">{item.productSku}</Link>
+                    </TableCell>
+                    <TableCell align="right">{formatCurrency(item.itemPrice)}</TableCell>
+                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell>{formatCurrency(orderList.revenue)}</TableCell>
+                    <TableCell>{formatCurrency(item.itemCostPrice)}</TableCell>
+                    <TableCell>{/* Imposto futuro */}</TableCell>
+                    <TableCell>{/* Tarifa de venda futura */}</TableCell>
+                    <TableCell>{/* Frete comprador futuro */}</TableCell>
+                    <TableCell>{/* Frete seller futuro */}</TableCell>
+                    <TableCell>{/* Margem de contribuição futura */}</TableCell>
+                    <TableCell>{/* MC % futura */}</TableCell>
+                  </TableRow>
+                ))
+              ))}
           </TableBody>
         </Table>
       </TableContainer>
@@ -212,5 +166,3 @@ export default function OrderTable() {
 }
 
 OrderTableHead.propTypes = { order: PropTypes.any, orderBy: PropTypes.string };
-
-OrderStatus.propTypes = { status: PropTypes.number };
