@@ -20,6 +20,14 @@ const dashboard = {
       url: '/dashboard/default',
       icon: icons.DashboardOutlined,
       breadcrumbs: false
+    },
+    {
+      id: 'pedidos',
+      title: 'Pedidos',
+      type: 'item',
+      url: '/pedidos',
+      icon: icons.DashboardOutlined,
+      breadcrumbs: false
     }
   ]
 };

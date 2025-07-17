@@ -10,6 +10,7 @@ const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/index')));
 
 // render - sample page
+const OrdersPage = Loadable(lazy(() => import('pages/orders/index')));
 const SamplePage = Loadable(lazy(() => import('pages/extra-pages/sample-page')));
 
 // ==============================|| MAIN ROUTING ||============================== //
@@ -34,6 +35,10 @@ const MainRoutes = {
           element: <DashboardDefault />
         }
       ]
+    },
+    {
+      path: 'pedidos',
+      element: <OrdersPage />
     },
     {
       path: 'sample-page',
