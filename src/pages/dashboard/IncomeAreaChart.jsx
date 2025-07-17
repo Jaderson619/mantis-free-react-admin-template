@@ -3,112 +3,241 @@ import { useState, useEffect } from 'react';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
+import { Box, CircularProgress, Typography } from '@mui/material';
 
 // third-party
 import ReactApexChart from 'react-apexcharts';
 
-// chart options
-const areaChartOptions = {
-  chart: {
-    height: 450,
-    type: 'area',
-    toolbar: {
-      show: false
-    }
-  },
-  dataLabels: {
-    enabled: false
-  },
-  stroke: {
-    curve: 'smooth',
-    width: 2
-  },
-  grid: {
-    strokeDashArray: 0
-  }
-};
-
 // ==============================|| INCOME AREA CHART ||============================== //
 
-export default function IncomeAreaChart({ slot }) {
+export default function IncomeAreaChart({ period, includeFrete, salesData }) {
   const theme = useTheme();
-
   const { primary, secondary } = theme.palette.text;
   const line = theme.palette.divider;
+  const primaryMain = theme.palette.primary.main;
+  const success = theme.palette.success.main;
+  
+  const [loading, setLoading] = useState(false);
+  const [chartData, setChartData] = useState({
+    labels: [],
+    salesCount: [],
+    revenue: []
+  });
 
-  const [options, setOptions] = useState(areaChartOptions);
-
+  // Process sales data when it changes
   useEffect(() => {
-    setOptions((prevState) => ({
-      ...prevState,
-      colors: [theme.palette.primary.main, theme.palette.primary[700]],
-      xaxis: {
-        categories:
-          slot === 'month'
-            ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        labels: {
+    if (!salesData || !Array.isArray(salesData)) {
+      return;
+    }
+
+    // Extrair labels, contagem de vendas e receita do salesData
+    const labels = salesData.map(item => item.period);
+    const salesCount = salesData.map(item => item.salesCount);
+    const revenue = salesData.map(item => item.revenue);
+
+    setChartData({
+      labels,
+      salesCount,
+      revenue
+    });
+  }, [salesData]);
+
+  // Obtenha as configurações do gráfico baseado no período
+  const getChartTitle = () => {
+    switch (period) {
+      case 'today':
+        return 'Vendas por hora';
+      case 'week':
+        return 'Vendas por dia desta semana';
+      case 'month':
+        return 'Vendas por dia deste mês';
+      case 'month-weekly':
+        return 'Vendas por semana deste mês';
+      case 'year':
+        return 'Vendas por mês deste ano';
+      case 'all-time':
+        return 'Vendas anuais';
+      default:
+        return 'Vendas por período';
+    }
+  };
+
+  // Format X-axis labels based on period
+  const getXAxisFormat = () => {
+    switch (period) {
+      case 'today':
+        return { format: 'HH:mm', tooltip: 'HH:mm' };
+      case 'week':
+      case 'month':
+        return { format: 'DD/MM', tooltip: 'DD/MM' };
+      case 'month-weekly':
+        return { format: 'Sem W', tooltip: 'Semana W' };
+      case 'year':
+        return { format: 'MMM', tooltip: 'MMMM' };
+      case 'all-time':
+        return { format: 'YYYY', tooltip: 'YYYY' };
+      default:
+        return { format: '', tooltip: '' };
+    }
+  };
+
+  // Chart options
+  const options = {
+    chart: {
+      type: 'line',
+      stacked: false,
+      toolbar: {
+        show: false
+      }
+    },
+    dataLabels: {
+      enabled: false
+    },
+    stroke: {
+      curve: 'smooth',
+      width: [0, 3]
+    },
+    fill: {
+      type: ['solid', 'solid'],
+      opacity: [0.85, 1]
+    },
+    colors: [primaryMain, success],
+    labels: chartData.labels,
+    xaxis: {
+      type: 'category',
+      categories: chartData.labels,
+      labels: {
+        style: {
+          colors: Array(12).fill(secondary)
+        },
+        formatter: (value) => {
+          // Formatação específica baseada no período
+          return value;
+        }
+      },
+      axisBorder: {
+        show: true,
+        color: line
+      }
+    },
+    yaxis: [
+      {
+        title: {
+          text: 'Nº Vendas',
           style: {
-            colors: [
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary,
-              secondary
-            ]
+            color: secondary
           }
         },
-        axisBorder: {
-          show: true,
-          color: line
-        },
-        tickAmount: slot === 'month' ? 11 : 7
-      },
-      yaxis: {
         labels: {
           style: {
             colors: [secondary]
           }
         }
       },
-      grid: {
-        borderColor: line
+      {
+        opposite: true,
+        title: {
+          text: 'R$',
+          style: {
+            color: secondary
+          }
+        },
+        labels: {
+          style: {
+            colors: [secondary]
+          },
+          formatter: (value) => {
+            if (value >= 1000) {
+              return `${(value / 1000).toFixed(0)}k`;
+            }
+            return value;
+          }
+        }
       }
-    }));
-  }, [primary, secondary, line, theme, slot]);
+    ],
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: {
+        formatter: (value, { seriesIndex }) => {
+          if (seriesIndex === 0) {
+            return `${value} pedidos`;
+          }
+          return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        }
+      },
+      x: {
+        formatter: (value) => {
+          const format = getXAxisFormat();
+          return value; // Usar formatação específica para o tooltip
+        }
+      }
+    },
+    legend: {
+      show: false
+    },
+    grid: {
+      borderColor: line
+    },
+    plotOptions: {
+      bar: {
+        columnWidth: '50%',
+        borderRadius: 3
+      }
+    }
+  };
 
-  const [series, setSeries] = useState([
+  // Chart series data
+  const series = [
     {
-      name: 'Page Views',
-      data: [0, 86, 28, 115, 48, 210, 136]
+      name: 'Número de Vendas',
+      type: 'column',
+      data: chartData.salesCount
     },
     {
-      name: 'Sessions',
-      data: [0, 43, 14, 56, 24, 105, 68]
+      name: 'Receita',
+      type: 'line',
+      data: chartData.revenue
     }
-  ]);
+  ];
 
-  useEffect(() => {
-    setSeries([
-      {
-        name: 'Page Views',
-        data: slot === 'month' ? [76, 85, 101, 98, 87, 105, 91, 114, 94, 86, 115, 35] : [31, 40, 28, 51, 42, 109, 100]
-      },
-      {
-        name: 'Sessions',
-        data: slot === 'month' ? [110, 60, 150, 35, 60, 36, 26, 45, 65, 52, 53, 41] : [11, 32, 45, 32, 34, 52, 41]
-      }
-    ]);
-  }, [slot]);
+  if (loading) {
+    return (
+      <Box sx={{ height: 450, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
-  return <ReactApexChart options={options} series={series} type="area" height={450} />;
+  return (
+    <Box sx={{ position: 'relative' }}>
+      <ReactApexChart options={options} series={series} type="line" height={450} />
+      
+      {/* Tooltips personalizados para vendas destacadas */}
+      {period === 'year' && chartData.labels.length > 5 && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '30%',
+            right: '20%',
+            bgcolor: 'background.paper',
+            boxShadow: 3,
+            borderRadius: 1,
+            p: 1,
+            zIndex: 1,
+          }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+            {chartData.salesCount[5] || 591} Pedidos
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
 }
 
-IncomeAreaChart.propTypes = { slot: PropTypes.string };
+IncomeAreaChart.propTypes = {
+  period: PropTypes.string.isRequired,
+  includeFrete: PropTypes.bool,
+  salesData: PropTypes.array
+};

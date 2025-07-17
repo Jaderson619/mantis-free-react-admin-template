@@ -100,6 +100,7 @@ export default function DashboardDefault() {
 
         {/* row 2 */}
         <Grid item xs={12} md={7} lg={8}>
+          {/* Removidas as props de data e filtros */}
           <UniqueVisitorCard />
         </Grid>
         <Grid item xs={12} md={5} lg={4}>
@@ -131,7 +132,11 @@ export default function DashboardDefault() {
             <Grid item />
           </Grid>
           <MainCard sx={{ mt: 2 }} content={false}>
-            <OrdersTable />
+            <OrdersTable 
+              startDate={startDate}
+              endDate={endDate}
+              applyFilter={applyFilter}
+            />
           </MainCard>
         </Grid>
         <Grid item xs={12} md={5} lg={4}>
