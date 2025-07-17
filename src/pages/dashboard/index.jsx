@@ -78,14 +78,14 @@ export default function DashboardDefault() {
           <DesktopDatePicker
             label="Data de Início"
             value={startDate}
-            onChange={(newValue) => setStartDate(newValue)}
+            onChange={(newValue) => {const dayStart = newValue.startOf('day') ; setStartDate(dayStart)}}
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <DesktopDatePicker
             label="Data de Fim"
             value={endDate}
-            onChange={(newValue) => setEndDate(newValue)}
+            onChange={(newValue) => {const dayEnd = newValue.endOf('day') ; setEndDate(dayEnd)}}
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>

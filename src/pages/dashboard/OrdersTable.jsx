@@ -97,6 +97,7 @@ export default function OrderTable() {
         setLoading(false); // Finaliza o estado de carregamento
       } catch (err) {
         setError('Erro ao carregar os dados');
+        console.log(err);
         setLoading(false); // Finaliza o estado de carregamento em caso de erro
       }
     };
