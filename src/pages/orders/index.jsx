@@ -61,91 +61,73 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      // Simula dados para este exemplo
-      // Em produção, substituir por chamada real à API
-      const mockOrders = [
-        {
-          id: '#2000012326981134',
-          customer: 'Lorena Magalhães',
-          customerId: 'MALO7327486',
-          product: 'Bicicleta Infantil Hot Wheels Caloi Disney Rodinhas 2 Anos',
-          sku: '1013500160001',
-          totalValue: 284.81,
-          fees: {
-            marketplace: 44.45,
-            shipping: 32.75,
-            total: 77.20
-          },
-          netValue: 207.61,
-          shippingCost: 107.02,
-          commissionCost: 21.36,
-          profit: 19.23,
-          profitPercentage: '6.75%',
-          date: '16/07/2025',
-          time: '21:28',
-          status: 'waiting',
-          shippingStatus: 'authorized',
-          address: 'CEP: 88.380-959',
-          estimatedDelivery: '19/07/2025',
-          quantity: 5,
-          imageUrl: 'https://http2.mlstatic.com/D_NQ_NP_2X_601616-MLB70104222685_062023-F.webp'
-        },
-        {
-          id: '#2000012326879218',
-          customer: 'Alexandre Castro',
-          customerId: 'ALEXANDREDOUGLASTOLEDOCASTRO',
-          product: 'Bola Basquete Preta Oficial Spalding Numero 7 + Bomba De Ar',
-          sku: '843552+B',
-          totalValue: 173.13,
-          fees: {
-            marketplace: 21.10,
-            shipping: 19.91,
-            total: 41.01
-          },
-          netValue: 132.12,
-          shippingCost: 81.00,
-          commissionCost: 12.98,
-          profit: 38.14,
-          profitPercentage: '22.03%',
-          date: '16/07/2025',
-          time: '21:21',
-          status: 'waiting',
-          shippingStatus: 'authorized',
-          address: 'CEP: 76.056-090',
-          estimatedDelivery: '25/07/2025',
-          quantity: 1,
-          imageUrl: 'https://http2.mlstatic.com/D_NQ_NP_2X_885183-MLB43005164329_082020-F.webp'
-        },
-        {
-          id: '#2000012326110404',
-          customer: 'Yukie Shimana Taira',
-          customerId: 'YSHIMANA7',
-          product: 'Chuveiro Ducha Eletrônica Engate Rápido 220v /7.000w',
-          sku: 'DE265',
-          totalValue: 218.99,
-          fees: {
-            marketplace: 23.45,
-            shipping: 25.18,
-            total: 48.63
-          },
-          netValue: 170.36,
-          shippingCost: 121.00,
-          commissionCost: 16.42,
-          profit: 32.94,
-          profitPercentage: '15.04%',
-          date: '16/07/2025',
-          time: '20:24',
-          status: 'waiting',
-          shippingStatus: 'authorized',
-          address: 'CEP: 06.693-120',
-          estimatedDelivery: '18/07/2025',
-          quantity: 6,
-          imageUrl: 'https://http2.mlstatic.com/D_NQ_NP_2X_737201-MLB31097592477_062019-F.webp'
+      const response = await axios.get('http://localhost:5001/api/orders/db', {
+        params: {
+          page: page,
+          limit: rowsPerPage
         }
-      ];
+      });
+
+      console.log('Dados da API:', response.data); // Debug
+
+      // Transformar os dados da API para o formato esperado pelo componente, agrupando por item
+      const transformedOrders = response.data.orders.flatMap(order => {
+        try {
+          // Agrupar itens idênticos do mesmo pedido
+          const groupedItems = {};
+          (order.orderItems || []).forEach(item => {
+            const key = `${item.productSku}-${item.productName}`;
+            if (!groupedItems[key]) {
+              groupedItems[key] = { ...item, quantity: 0 };
+            }
+            groupedItems[key].quantity += Number(item.quantity || 0);
+          });
+
+          // Converter os itens agrupados em linhas da tabela
+          return Object.values(groupedItems).map(item => {
+
+          // Formatar a data com validação
+          const orderDate = order.date ? dayjs(order.date) : dayjs();
+          
+          return {
+            id: `#${order.orderId || ''}`,
+            customer: 'Cliente',
+            customerId: '',
+            product: item.productName || 'Produto não informado',
+            sku: item.productSku || 'SKU não informado',
+            totalValue: order.revenue,
+            fees: {
+              marketplace: 0,
+              shipping: order.shipping,
+              total: 0
+            },
+            netValue: 0,
+            shippingCost: 0,
+            commissionCost: 0,
+            profit: 0,
+            profitPercentage: 0,
+            date: orderDate.format('DD/MM/YYYY'),
+            time: orderDate.format('HH:mm'),
+            status: item.nfeId ? 'authorized' : 'waiting',
+            shippingStatus: item.nfeId ? 'authorized' : 'waiting',
+            address: 'CEP: Não informado',
+            estimatedDelivery: orderDate.add(3, 'day').format('DD/MM/YYYY'),
+            quantity: Number(item.quantity) || 0,
+            imageUrl: item.imageUrl || 'https://via.placeholder.com/60'
+          };
+        });
+      } catch (err) {
+        console.error('Erro ao processar pedido:', err, order);
+        return [];
+      }
+    }).filter(Boolean); // Remove pedidos que falharam no processamento
       
-      setOrders(mockOrders);
-      setTotalPages(5); // Simulando 5 páginas
+      console.log('Pedidos transformados:', transformedOrders); // Debug
+      
+      setOrders(transformedOrders);
+      // Usar o total de registros da API para calcular o número de páginas
+      const totalRecords = response.data.total || response.data.orders.length;
+      setTotalPages(Math.ceil(totalRecords / rowsPerPage));
     } catch (error) {
       console.error('Erro ao carregar os pedidos:', error);
     } finally {
@@ -324,7 +306,7 @@ export default function OrdersPage() {
                           fontWeight: 'bold',
                           mb: 0.5
                         }}>
-                          1x
+                          {order.quantity}x
                         </Box>
                         <Typography variant="body2">{order.product}</Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
