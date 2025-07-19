@@ -91,7 +91,7 @@ export default function OrdersPage() {
           
           return {
             id: `#${order.orderId || ''}`,
-            customer: 'Cliente',
+            customer: order.customerName,
             customerId: '',
             product: item.productName || 'Produto não informado',
             sku: item.productSku || 'SKU não informado',
