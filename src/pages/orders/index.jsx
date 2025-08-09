@@ -61,75 +61,82 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:5001/api/orders/db', {
-        params: {
-          page: page,
-          limit: rowsPerPage
+      const response = await axios.get('http://localhost:5001/api/orders/marketplace/db', {
+        params: { page, limit: rowsPerPage }
+      });
+      console.log('Dados da API (marketplace):', response.data);
+
+      // Suporta tanto { orders: [...] } quanto array direto
+      let rawOrders = response.data?.orders ?? response.data ?? [];
+      if (!Array.isArray(rawOrders)) rawOrders = [rawOrders];
+
+      // Transformar cada pedido em linhas por item agrupado (mesmo sku + productName)
+      const transformedOrders = rawOrders.flatMap(order => {
+        try {
+          const items = Array.isArray(order.items) ? order.items : [];
+          const grouped = {};
+            items.forEach(it => {
+            const key = `${it.sku}-${it.productName || it.title}`;
+            if (!grouped[key]) {
+              grouped[key] = { ...it, quantity: 0 };
+            }
+            grouped[key].quantity += Number(it.quantity || 0);
+          });
+
+          const orderDate = order.date ? dayjs(order.date) : dayjs();
+          const orderStatus = order.status || 'pending';
+
+          return Object.values(grouped).map(it => {
+            const unitPrice = Number(it.unit_price || it.unitPrice || 0);
+            const quantity = Number(it.quantity || 0);
+            const lineRevenue = unitPrice * quantity; // receita por item agrupado
+            // Como não temos custos/taxas detalhados nesse payload, placeholders 0
+            const shipping = 0;
+            const marketplaceFee = 0;
+            const netValue = lineRevenue - shipping - marketplaceFee;
+            const profit = 0; // Sem custo para calcular margem real
+            const profitPercentage = '0%';
+
+            return {
+              id: `#${order.orderId || ''}`,
+              customer: 'Cliente',
+              customerId: order.orderId || '',
+              product: it.productName || it.title || 'Produto não informado',
+              sku: it.sku || 'SKU não informado',
+              totalValue: lineRevenue,
+              fees: {
+                marketplace: marketplaceFee,
+                shipping: shipping,
+                total: marketplaceFee + shipping
+              },
+              netValue,
+              shippingCost: shipping,
+              commissionCost: 0,
+              profit,
+              profitPercentage,
+              date: orderDate.format('DD/MM/YYYY'),
+              time: orderDate.format('HH:mm'),
+              status: orderStatus,
+              shippingStatus: orderStatus,
+              address: 'CEP: Não informado',
+              estimatedDelivery: orderDate.add(3, 'day').format('DD/MM/YYYY'),
+              quantity,
+              imageUrl: 'https://via.placeholder.com/60'
+            };
+          });
+        } catch (err) {
+          console.error('Erro ao processar pedido (marketplace):', err, order);
+          return [];
         }
       });
 
-      console.log('Dados da API:', response.data); // Debug
-
-      // Transformar os dados da API para o formato esperado pelo componente, agrupando por item
-      const transformedOrders = response.data.orders.flatMap(order => {
-        try {
-          // Agrupar itens idênticos do mesmo pedido
-          const groupedItems = {};
-          (order.orderItems || []).forEach(item => {
-            const key = `${item.productSku}-${item.productName}`;
-            if (!groupedItems[key]) {
-              groupedItems[key] = { ...item, quantity: 0 };
-            }
-            groupedItems[key].quantity += Number(item.quantity || 0);
-          });
-
-          // Converter os itens agrupados em linhas da tabela
-          return Object.values(groupedItems).map(item => {
-
-          // Formatar a data com validação
-          const orderDate = order.date ? dayjs(order.date) : dayjs();
-          
-          return {
-            id: `#${order.orderId || ''}`,
-            customer: order.customerName,
-            customerId: '',
-            product: item.productName || 'Produto não informado',
-            sku: item.productSku || 'SKU não informado',
-            totalValue: order.revenue,
-            fees: {
-              marketplace: 0,
-              shipping: order.shipping,
-              total: 0
-            },
-            netValue: 0,
-            shippingCost: 0,
-            commissionCost: 0,
-            profit: 0,
-            profitPercentage: 0,
-            date: orderDate.format('DD/MM/YYYY'),
-            time: orderDate.format('HH:mm'),
-            status: item.nfeId ? 'authorized' : 'waiting',
-            shippingStatus: item.nfeId ? 'authorized' : 'waiting',
-            address: 'CEP: Não informado',
-            estimatedDelivery: orderDate.add(3, 'day').format('DD/MM/YYYY'),
-            quantity: Number(item.quantity) || 0,
-            imageUrl: item.imageUrl || 'https://via.placeholder.com/60'
-          };
-        });
-      } catch (err) {
-        console.error('Erro ao processar pedido:', err, order);
-        return [];
-      }
-    }).filter(Boolean); // Remove pedidos que falharam no processamento
-      
-      console.log('Pedidos transformados:', transformedOrders); // Debug
-      
+      console.log('Pedidos transformados (marketplace):', transformedOrders);
       setOrders(transformedOrders);
-      // Usar o total de registros da API para calcular o número de páginas
-      const totalRecords = response.data.total || response.data.orders.length;
+
+      const totalRecords = response.data.total || rawOrders.length;
       setTotalPages(Math.ceil(totalRecords / rowsPerPage));
     } catch (error) {
-      console.error('Erro ao carregar os pedidos:', error);
+      console.error('Erro ao carregar os pedidos (marketplace):', error);
     } finally {
       setLoading(false);
     }

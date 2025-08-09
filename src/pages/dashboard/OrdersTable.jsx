@@ -92,17 +92,19 @@ export default function OrderTable() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const response = await axios.get('http://localhost:5001/api/orders/db'); // URL da sua API
-        setOrders(response.data.orders || []); // Armazena os dados em "orders" ou um array vazio
-        setLoading(false); // Finaliza o estado de carregamento
+        const response = await axios.get('http://localhost:5001/api/orders/marketplace/db');
+        // A API retorna uma lista de pedidos já no formato esperado
+        let data = response.data?.orders ?? response.data ?? [];
+        if (!Array.isArray(data)) data = [data];
+        setOrders(data);
       } catch (err) {
         setError('Erro ao carregar os dados');
-        console.log(err);
-        setLoading(false); // Finaliza o estado de carregamento em caso de erro
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
-
-    fetchOrders(); // Chama a função ao montar o componente
+    fetchOrders();
   }, []);
 
   const order = 'asc';
@@ -136,29 +138,61 @@ export default function OrderTable() {
         <Table aria-labelledby="tableTitle">
           <OrderTableHead order={order} orderBy={orderBy} />
           <TableBody>
-            {Array.isArray(orders) &&
-              stableSort(orders, getComparator(order, orderBy)).map((orderList) => (
-                orderList.orderItems.map((item, itemIndex) => (
-                  <TableRow key={`${orderList.orderId}-${itemIndex}`} hover role="checkbox">
-                    <TableCell>{orderList.orderId}</TableCell>
-                    <TableCell align="right">{new Date(orderList.date).toLocaleDateString()}</TableCell>
-                    <TableCell>{item.productName}</TableCell>
-                    <TableCell>
-                      <Link color="secondary">{item.productSku}</Link>
-                    </TableCell>
-                    <TableCell align="right">{formatCurrency(item.itemPrice)}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>{formatCurrency(orderList.revenue)}</TableCell>
-                    <TableCell>{formatCurrency(item.itemCostPrice)}</TableCell>
-                    <TableCell>{/* Imposto futuro */}</TableCell>
-                    <TableCell>{/* Tarifa de venda futura */}</TableCell>
-                    <TableCell>{/* Frete comprador futuro */}</TableCell>
-                    <TableCell>{/* Frete seller futuro */}</TableCell>
-                    <TableCell>{/* Margem de contribuição futura */}</TableCell>
-                    <TableCell>{/* MC % futura */}</TableCell>
-                  </TableRow>
-                ))
-              ))}
+            {Array.isArray(orders) && orders.length > 0 ? (
+              stableSort(orders, getComparator(order, orderBy)).flatMap((orderObj) => {
+                const items = Array.isArray(orderObj.items) ? orderObj.items : [];
+                if (items.length === 0) {
+                  return (
+                    <TableRow key={`${orderObj.orderId}-noitems`} hover>
+                      <TableCell>{orderObj.orderId || '-'}</TableCell>
+                      <TableCell align="right">{orderObj.date ? new Date(orderObj.date).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell colSpan={headCells.length - 2}>
+                        <Typography variant="caption" color="text.secondary">Sem itens</Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                return items.map((item, idx) => {
+                  const unitPrice = Number(item.unit_price || 0);
+                  const quantity = Number(item.quantity || 0);
+                  const revenueOrder = Number(orderObj.totalAmount || orderObj.paidAmount || 0);
+                  // Placeholders para campos ainda não fornecidos pelo backend
+                  const costTotal = 0;
+                  const governmentTax = 0;
+                  const salesTax = 0;
+                  const shippingBuyer = 0;
+                  const shippingSeller = 0;
+                  const contributionMargin = revenueOrder - (costTotal + governmentTax + salesTax + shippingSeller);
+                  const cmPerc = revenueOrder > 0 ? (contributionMargin / revenueOrder) * 100 : 0;
+                  return (
+                    <TableRow key={`${orderObj.orderId}-${idx}`} hover>
+                      <TableCell>{orderObj.orderId || '-'}</TableCell>
+                      <TableCell align="right">{orderObj.date ? new Date(orderObj.date).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell>{item.productName || item.title || '-'}</TableCell>
+                      <TableCell>
+                        <Link color="secondary">{item.sku || '-'}</Link>
+                      </TableCell>
+                      <TableCell align="right">{formatCurrency(unitPrice)}</TableCell>
+                      <TableCell>{quantity}</TableCell>
+                      <TableCell>{formatCurrency(revenueOrder)}</TableCell>
+                      <TableCell>{formatCurrency(costTotal)}</TableCell>
+                      <TableCell>{governmentTax ? formatCurrency(governmentTax) : '-'}</TableCell>
+                      <TableCell>{salesTax ? formatCurrency(salesTax) : '-'}</TableCell>
+                      <TableCell>{shippingBuyer ? formatCurrency(shippingBuyer) : '-'}</TableCell>
+                      <TableCell>{shippingSeller ? formatCurrency(shippingSeller) : '-'}</TableCell>
+                      <TableCell>{formatCurrency(contributionMargin)}</TableCell>
+                      <TableCell>{cmPerc.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  );
+                });
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={headCells.length}>
+                  <Typography align="center" color="text.secondary">Nenhum pedido encontrado</Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>

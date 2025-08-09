@@ -57,8 +57,8 @@ const actionSX = {
 // ==============================|| DASHBOARD - DEFAULT ||============================== //
 
 export default function DashboardDefault() {
-  const [startDate, setStartDate] = useState(dayjs().subtract(1, 'month'));  // Data de início padrão
-  const [endDate, setEndDate] = useState(dayjs());  // Data de fim padrão
+  const [startDate, setStartDate] = useState(dayjs().subtract(1, 'month').startOf('day'));  // Data de início padrão (00:00:00)
+  const [endDate, setEndDate] = useState(dayjs().endOf('day'));  // Data de fim padrão (23:59:59)
   const [applyFilter, setApplyFilter] = useState(false); // Novo estado para acionar o filtro
 
 
@@ -78,14 +78,14 @@ export default function DashboardDefault() {
           <DesktopDatePicker
             label="Data de Início"
             value={startDate}
-            onChange={(newValue) => {const dayStart = newValue.startOf('day') ; setStartDate(dayStart)}}
+            onChange={(newValue) => { if (newValue) { setStartDate(newValue.startOf('day')); } }}
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <DesktopDatePicker
             label="Data de Fim"
             value={endDate}
-            onChange={(newValue) => {const dayEnd = newValue.endOf('day') ; setEndDate(dayEnd)}}
+            onChange={(newValue) => { if (newValue) { setEndDate(newValue.endOf('day')); } }}
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>

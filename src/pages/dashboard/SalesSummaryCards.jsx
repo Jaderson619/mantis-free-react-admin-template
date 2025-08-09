@@ -1,6 +1,7 @@
 // components/cards/SalesSummaryCards.js
 
 import React, { useEffect, useState } from 'react';
+import dayjs from 'dayjs';
 import { Grid, Typography } from '@mui/material';
 import AnalyticEcommerce from 'components/cards/statistics/AnalyticEcommerce';
 import axios from 'axios';
@@ -11,7 +12,11 @@ function SalesSummaryCards({ startDate, endDate, applyFilter }) {
   useEffect(() => {
     async function fetchResumoVendas() {
       try {
-        const response = await axios.get(`http://localhost:5001/api/reports/salesSummary/?startDate=${startDate}&endDate=${endDate}&status=paid`);
+  // Garantir que o intervalo enviado cubra o dia completo em horário local (00:00:00 até 23:59:59)
+  const start = dayjs(startDate).startOf('day').format('YYYY-MM-DD HH:mm:ss');
+  const end = dayjs(endDate).endOf('day').format('YYYY-MM-DD HH:mm:ss');
+  const url = `http://localhost:5001/api/reports/salesSummary/?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}&status=paid`;
+  const response = await axios.get(url);
         const data = response.data.resumoVendas;
         setResumoVendas({
           receitaTotalVendasAprovadas: parseFloat(data.receitaTotalVendasAprovadas),
