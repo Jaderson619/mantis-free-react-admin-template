@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 // material-ui
 import Button from '@mui/material/Button';
@@ -18,6 +18,7 @@ import Box from '@mui/material/Box';
 // third party
 import * as Yup from 'yup';
 import { Formik } from 'formik';
+import axios from 'axios';
 
 // project import
 import AnimateButton from 'components/@extended/AnimateButton';
@@ -30,6 +31,7 @@ import EyeInvisibleOutlined from '@ant-design/icons/EyeInvisibleOutlined';
 // ============================|| JWT - REGISTER ||============================ //
 
 export default function AuthRegister() {
+  const navigate = useNavigate();
   const [level, setLevel] = useState();
   const [showPassword, setShowPassword] = useState(false);
   const handleClickShowPassword = () => {
@@ -56,16 +58,35 @@ export default function AuthRegister() {
           firstname: '',
           lastname: '',
           email: '',
-          company: '',
           password: '',
           submit: null
         }}
         validationSchema={Yup.object().shape({
           firstname: Yup.string().max(255).required('First Name is required'),
-          lastname: Yup.string().max(255).required('Last Name is required'),
-          email: Yup.string().email('Must be a valid email').max(255).required('Email is required'),
-          password: Yup.string().max(255).required('Password is required')
+            lastname: Yup.string().max(255).required('Last Name is required'),
+            email: Yup.string().email('Must be a valid email').max(255).required('Email is required'),
+            password: Yup.string().min(6,'Min 6 chars').max(255).required('Password is required')
         })}
+        onSubmit={async (values, { setSubmitting, setErrors }) => {
+          try {
+            const payload = {
+              firstName: values.firstname.trim(),
+              lastName: values.lastname.trim(),
+              email: values.email.trim(),
+              password: values.password
+            };
+            const res = await axios.post('http://localhost:5001/api/auth/register', payload, { headers: { 'Content-Type': 'application/json' } });
+            const token = res.data?.token;
+            if (token) localStorage.setItem('token', token);
+            navigate('/');
+          } catch (err) {
+            console.error(err);
+            const apiMsg = err.response?.data?.error || 'Falha no registro';
+            setErrors({ submit: apiMsg });
+          } finally {
+            setSubmitting(false);
+          }
+        }}
       >
         {({ errors, handleBlur, handleChange, handleSubmit, isSubmitting, touched, values }) => (
           <form noValidate onSubmit={handleSubmit}>
@@ -113,27 +134,7 @@ export default function AuthRegister() {
                   </FormHelperText>
                 )}
               </Grid>
-              <Grid item xs={12}>
-                <Stack spacing={1}>
-                  <InputLabel htmlFor="company-signup">Company</InputLabel>
-                  <OutlinedInput
-                    fullWidth
-                    error={Boolean(touched.company && errors.company)}
-                    id="company-signup"
-                    value={values.company}
-                    name="company"
-                    onBlur={handleBlur}
-                    onChange={handleChange}
-                    placeholder="Demo Inc."
-                    inputProps={{}}
-                  />
-                </Stack>
-                {touched.company && errors.company && (
-                  <FormHelperText error id="helper-text-company-signup">
-                    {errors.company}
-                  </FormHelperText>
-                )}
-              </Grid>
+              {/* Company field removido conforme API não exige */}
               <Grid item xs={12}>
                 <Stack spacing={1}>
                   <InputLabel htmlFor="email-signup">Email Address*</InputLabel>
@@ -208,14 +209,7 @@ export default function AuthRegister() {
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="body2">
-                  By Signing up, you agree to our &nbsp;
-                  <Link variant="subtitle2" component={RouterLink} to="#">
-                    Terms of Service
-                  </Link>
-                  &nbsp; and &nbsp;
-                  <Link variant="subtitle2" component={RouterLink} to="#">
-                    Privacy Policy
-                  </Link>
+                  Ao criar conta você concorda com os termos de uso.
                 </Typography>
               </Grid>
               {errors.submit && (
@@ -226,7 +220,7 @@ export default function AuthRegister() {
               <Grid item xs={12}>
                 <AnimateButton>
                   <Button disableElevation disabled={isSubmitting} fullWidth size="large" type="submit" variant="contained" color="primary">
-                    Create Account
+                    {isSubmitting ? 'Registrando...' : 'Criar Conta'}
                   </Button>
                 </AnimateButton>
               </Grid>

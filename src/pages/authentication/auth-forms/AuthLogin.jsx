@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 // material-ui
 import Button from '@mui/material/Button';
@@ -20,6 +20,7 @@ import Typography from '@mui/material/Typography';
 // third party
 import * as Yup from 'yup';
 import { Formik } from 'formik';
+import axios from 'axios';
 
 // project import
 import AnimateButton from 'components/@extended/AnimateButton';
@@ -32,6 +33,7 @@ import FirebaseSocial from './FirebaseSocial';
 // ============================|| JWT - LOGIN ||============================ //
 
 export default function AuthLogin({ isDemo = false }) {
+  const navigate = useNavigate();
   const [checked, setChecked] = React.useState(false);
 
   const [showPassword, setShowPassword] = React.useState(false);
@@ -55,6 +57,23 @@ export default function AuthLogin({ isDemo = false }) {
           email: Yup.string().email('Must be a valid email').max(255).required('Email is required'),
           password: Yup.string().max(255).required('Password is required')
         })}
+        onSubmit={async (values, { setSubmitting, setErrors }) => {
+          try {
+            const res = await axios.post('http://localhost:5001/api/auth/login', {
+              email: values.email.trim(),
+              password: values.password
+            }, { headers: { 'Content-Type': 'application/json' } });
+            const token = res.data?.token;
+            if (token) localStorage.setItem('token', token);
+            navigate('/');
+          } catch (err) {
+            console.error(err);
+            const apiMsg = err.response?.data?.error || 'Login falhou';
+            setErrors({ submit: apiMsg });
+          } finally {
+            setSubmitting(false);
+          }
+        }}
       >
         {({ errors, handleBlur, handleChange, handleSubmit, isSubmitting, touched, values }) => (
           <form noValidate onSubmit={handleSubmit}>

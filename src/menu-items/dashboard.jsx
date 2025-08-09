@@ -28,6 +28,14 @@ const dashboard = {
       url: '/pedidos',
       icon: icons.DashboardOutlined,
       breadcrumbs: false
+    },
+    {
+  id: 'produtos',
+  title: 'Produtos',
+  type: 'item',
+  url: '/produtos',
+      icon: icons.DashboardOutlined,
+      breadcrumbs: false
     }
   ]
 };

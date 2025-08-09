@@ -99,7 +99,7 @@ export default function OrdersPage() {
 
             return {
               id: `#${order.orderId || ''}`,
-              customer: 'Cliente',
+              customer: order.customerName || 'Cliente não informado',
               customerId: order.orderId || '',
               product: it.productName || it.title || 'Produto não informado',
               sku: it.sku || 'SKU não informado',
@@ -118,7 +118,7 @@ export default function OrdersPage() {
               time: orderDate.format('HH:mm'),
               status: orderStatus,
               shippingStatus: orderStatus,
-              address: 'CEP: Não informado',
+              address: order.customerZip,
               estimatedDelivery: orderDate.add(3, 'day').format('DD/MM/YYYY'),
               quantity,
               imageUrl: it.imageUrl || 'https://via.placeholder.com/60'
