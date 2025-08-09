@@ -121,7 +121,7 @@ export default function OrdersPage() {
               address: 'CEP: Não informado',
               estimatedDelivery: orderDate.add(3, 'day').format('DD/MM/YYYY'),
               quantity,
-              imageUrl: 'https://via.placeholder.com/60'
+              imageUrl: it.imageUrl || 'https://via.placeholder.com/60'
             };
           });
         } catch (err) {
