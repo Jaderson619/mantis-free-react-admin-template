@@ -61,7 +61,7 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:5001/api/orders/marketplace/db', {
+      const response = await axios.get('http://localhost:5001/api/orders/db', {
         params: { page, limit: rowsPerPage }
       });
       console.log('Dados da API (marketplace):', response.data);
@@ -70,49 +70,109 @@ export default function OrdersPage() {
       let rawOrders = response.data?.orders ?? response.data ?? [];
       if (!Array.isArray(rawOrders)) rawOrders = [rawOrders];
 
-      // Transformar cada pedido em linhas por item agrupado (mesmo sku + productName)
-      const transformedOrders = rawOrders.flatMap(order => {
+      // Helper para números seguros
+      const num = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      // Transformar cada pedido em linhas por item agrupado (mesmo sku + productName/title)
+      const transformedOrders = rawOrders.flatMap((order) => {
         try {
           const items = Array.isArray(order.items) ? order.items : [];
-          const grouped = {};
-            items.forEach(it => {
-            const key = `${it.sku}-${it.productName || it.title}`;
-            if (!grouped[key]) {
-              grouped[key] = { ...it, quantity: 0 };
+          const grouped = new Map();
+
+          items.forEach((it) => {
+            const key = `${it.sku}-${it.productName || it.title || ''}`;
+
+            const qty = num(it.quantity);
+            const unitPrice = num(it.unit_price || it.unitPrice);
+            const revenue = unitPrice * qty;
+
+            // Comissões do item (total já inclui item + rateio do pedido)
+            const commissionTotal =
+              it.commission_total != null
+                ? num(it.commission_total)
+                : num(it.commission_item) + num(it.commission_order_share);
+
+            // Frete pago pelo comprador no item (se houver)
+            const shippingPaidByBuyer = num(it.shipping_paid_by_buyer);
+
+            // Custos e impostos do item
+            const totalCost = it.total_cost != null ? num(it.total_cost) : num(it.unit_cost) * qty;
+            const taxTotal = it.tax_total != null ? num(it.tax_total) : num(it.tax_unit) * qty;
+
+            // Lucro informado pelo backend (preferencial)
+            const itemProfit = num(it.profit);
+            const image = it.imageUrl || it.thumbnailUrl || 'https://via.placeholder.com/60';
+
+            if (!grouped.has(key)) {
+              grouped.set(key, {
+                sku: it.sku || 'SKU não informado',
+                productName: it.productName || it.title || 'Produto não informado',
+                imageUrl: image,
+                sumQuantity: 0,
+                sumRevenue: 0,
+                sumCommission: 0,
+                sumShippingBuyer: 0,
+                sumCost: 0,
+                sumTax: 0,
+                sumProfit: 0
+              });
             }
-            grouped[key].quantity += Number(it.quantity || 0);
+
+            const g = grouped.get(key);
+            g.sumQuantity += qty;
+            g.sumRevenue += revenue;
+            g.sumCommission += commissionTotal;
+            g.sumShippingBuyer += shippingPaidByBuyer;
+            g.sumCost += totalCost;
+            g.sumTax += taxTotal;
+            g.sumProfit += itemProfit;
           });
 
           const orderDate = order.date ? dayjs(order.date) : dayjs();
           const orderStatus = order.status || 'pending';
 
-          return Object.values(grouped).map(it => {
-            const unitPrice = Number(it.unit_price || it.unitPrice || 0);
-            const quantity = Number(it.quantity || 0);
-            const lineRevenue = unitPrice * quantity; // receita por item agrupado
-            // Como não temos custos/taxas detalhados nesse payload, placeholders 0
-            const shipping = 0;
-            const marketplaceFee = 0;
-            const netValue = lineRevenue - shipping - marketplaceFee;
-            const profit = 0; // Sem custo para calcular margem real
-            const profitPercentage = '0%';
+          // Ratear (se necessário) o frete do vendedor do nível do pedido para os itens por receita
+          const orderShippingSeller = num(order.shippingCost); // custo de envio do vendedor (pedido)
+          const orderRevenueSum = Array.from(grouped.values()).reduce((acc, g) => acc + g.sumRevenue, 0);
+
+          return Array.from(grouped.values()).map((g) => {
+            const shippingSellerShare =
+              orderRevenueSum > 0 ? (orderShippingSeller * (g.sumRevenue / orderRevenueSum)) : 0;
+
+            // Taxas para a UI
+            const marketplaceFee = g.sumCommission; // Comissão total do item (já inclui rateio)
+            const shippingBuyer = g.sumShippingBuyer; // Frete pago pelo comprador
+
+            // Líquido (receita menos taxas de marketplace e frete cobrado do comprador)
+            const netValue = g.sumRevenue - marketplaceFee - shippingBuyer;
+
+            // Lucro: usar o valor enviado, senão calcular
+            const profitFallback =
+              g.sumRevenue - marketplaceFee - shippingBuyer - g.sumCost - g.sumTax - shippingSellerShare;
+            const profit = g.sumProfit || profitFallback;
+
+            const profitPercentage =
+              g.sumRevenue > 0 ? `${((profit / g.sumRevenue) * 100).toFixed(2)}%` : '0%';
 
             return {
-              id: `#${order.orderId || ''}`,
+              id: `#${order.orderId || ''}-${g.sku}`, // único por item
               customer: order.customerName || 'Cliente não informado',
               customerId: order.orderId || '',
-              product: it.productName || it.title || 'Produto não informado',
-              sku: it.sku || 'SKU não informado',
-              totalValue: lineRevenue,
+              product: g.productName,
+              sku: g.sku,
+              totalValue: g.sumRevenue, // Valor da venda (item agrupado)
               fees: {
-                marketplace: marketplaceFee,
-                shipping: shipping,
-                total: marketplaceFee + shipping
+                marketplace: marketplaceFee,           // Comissão do marketplace (consumido do payload)
+                shipping: shippingBuyer,               // Frete pago pelo comprador (payload)
+                total: marketplaceFee + shippingBuyer
               },
-              netValue,
-              shippingCost: shipping,
-              commissionCost: 0,
-              profit,
+              netValue,                                 // Receita líquida após taxas
+              shippingCost: shippingSellerShare,        // Rateio do frete do vendedor por item
+              commissionCost: marketplaceFee,           // Coluna "Comissão" da tabela
+              profit,                                   // Lucro (do payload ou calculado)
               profitPercentage,
               date: orderDate.format('DD/MM/YYYY'),
               time: orderDate.format('HH:mm'),
@@ -120,8 +180,8 @@ export default function OrdersPage() {
               shippingStatus: orderStatus,
               address: order.customerZip,
               estimatedDelivery: orderDate.add(3, 'day').format('DD/MM/YYYY'),
-              quantity,
-              imageUrl: it.imageUrl || 'https://via.placeholder.com/60'
+              quantity: g.sumQuantity,
+              imageUrl: g.imageUrl
             };
           });
         } catch (err) {
@@ -133,8 +193,12 @@ export default function OrdersPage() {
       console.log('Pedidos transformados (marketplace):', transformedOrders);
       setOrders(transformedOrders);
 
-      const totalRecords = response.data.total || rawOrders.length;
-      setTotalPages(Math.ceil(totalRecords / rowsPerPage));
+      // Se o backend passar total, usamos; senão caímos no length de orders
+      const totalRecords =
+        response.data.total ??
+        response.data?.data?.total ??
+        rawOrders.length;
+      setTotalPages(Math.ceil(Number(totalRecords || transformedOrders.length) / rowsPerPage));
     } catch (error) {
       console.error('Erro ao carregar os pedidos (marketplace):', error);
     } finally {
