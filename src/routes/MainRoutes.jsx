@@ -3,6 +3,7 @@ import { lazy } from 'react';
 // project import
 import Loadable from 'components/Loadable';
 import Dashboard from 'layout/Dashboard';
+import ErrorBoundary from 'components/ErrorBoundary';
 
 const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
@@ -20,6 +21,14 @@ const SamplePage = Loadable(lazy(() => import('pages/extra-pages/sample-page')))
 const MainRoutes = {
   path: '/',
   element: <Dashboard />,
+  errorElement: (
+    <ErrorBoundary>
+      <div style={{ padding: 20 }}>
+        <h2>Erro ao carregar a página</h2>
+        <p>Tente recarregar ou voltar à página inicial.</p>
+      </div>
+    </ErrorBoundary>
+  ),
   children: [
     {
       path: '/',
@@ -40,15 +49,15 @@ const MainRoutes = {
     },
     {
       path: 'pedidos',
-      element: <OrdersPage />
+      element: <ErrorBoundary><OrdersPage /></ErrorBoundary>
     },
     {
       path: 'produtos',
-      element: <ProductsList />
+      element: <ErrorBoundary><ProductsList /></ErrorBoundary>
     },
     {
       path: 'produtos/novo',
-      element: <ProductCreate />
+      element: <ErrorBoundary><ProductCreate /></ErrorBoundary>
     },
     {
       path: 'sample-page',
