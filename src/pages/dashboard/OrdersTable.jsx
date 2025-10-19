@@ -92,9 +92,9 @@ export default function OrderTable() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const response = await axios.get('http://localhost:5001/api/orders/marketplace/db');
+        const response = await axios.get('http://localhost:5001/api/orders/db');
         // A API retorna uma lista de pedidos já no formato esperado
-        let data = response.data?.orders ?? response.data ?? [];
+        let data = response.data?.data?.orders ?? response.data?.orders ?? response.data ?? [];
         if (!Array.isArray(data)) data = [data];
         setOrders(data);
       } catch (err) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText } from '@mui/material';
+import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText, Collapse, Tooltip, Divider } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import MainCard from 'components/MainCard';
 import dayjs from 'dayjs';
@@ -8,6 +8,10 @@ import AddOutlined from '@ant-design/icons/PlusOutlined';
 import ReloadOutlined from '@ant-design/icons/ReloadOutlined';
 import EditOutlined from '@ant-design/icons/EditOutlined';
 import UploadOutlined from '@ant-design/icons/UploadOutlined';
+import DownOutlined from '@ant-design/icons/DownOutlined';
+import UpOutlined from '@ant-design/icons/UpOutlined';
+import InfoCircleOutlined from '@ant-design/icons/InfoCircleOutlined';
+import DatabaseOutlined from '@ant-design/icons/DatabaseOutlined';
 
 export default function ProductsList() {
   const navigate = useNavigate();
@@ -35,30 +39,141 @@ export default function ProductsList() {
   const [importMode, setImportMode] = useState('auto'); // futuro: single|batch|auto
   const [importCanceled, setImportCanceled] = useState(false);
   const [currentController, setCurrentController] = useState(null);
+  // Lotes expandidos
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [lotsDetailsOpen, setLotsDetailsOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(new Set());
+
+  const fetchProductDetails = async (sku) => {
+    setLoadingDetails(prev => new Set(prev).add(sku));
+    try {
+      let response;
+      try {
+        response = await axios.get(`http://localhost:5001/api/products/${encodeURIComponent(sku)}`, {
+          headers: { ...getAuthHeaders() }
+        });
+      } catch (apiError) {
+        response = await axios.get(`http://localhost:5001/api/products/db/${encodeURIComponent(sku)}`, {
+          headers: { ...getAuthHeaders() }
+        });
+      }
+      
+      const productDetails = response.data?.data || response.data;
+      
+      if (productDetails) {
+        // Atualizar o produto na lista com os detalhes completos (incluindo costLots)
+        setProducts(prev => prev.map(p => p.sku === sku ? { ...p, ...productDetails } : p));
+        
+        // Retornar os detalhes para uso imediato
+        return productDetails;
+      }
+      return null;
+    } catch (err) {
+      console.error('Erro ao buscar detalhes do produto:', err);
+      
+      // Mostrar erro se backend estiver offline
+      if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+        setSnack({ open: true, type: 'error', msg: 'Backend offline! Por favor, inicie o servidor backend.' });
+      }
+      return null;
+    } finally {
+      setLoadingDetails(prev => {
+        const next = new Set(prev);
+        next.delete(sku);
+        return next;
+      });
+    }
+  };
+
+  const toggleRow = async (sku) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(sku)) {
+      newExpanded.delete(sku);
+    } else {
+      newExpanded.add(sku);
+      // Buscar detalhes completos se ainda não temos costLots
+      const product = products.find(p => p.sku === sku);
+      if (!product?.costLots) {
+        await fetchProductDetails(sku);
+      }
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const openLotsDetails = async (product) => {
+    // Buscar detalhes completos se ainda não temos costLots
+    if (!product.costLots || product.costLots.length === 0) {
+      // Buscar os detalhes e receber diretamente
+      const productDetails = await fetchProductDetails(product.sku);
+      
+      if (productDetails) {
+        setSelectedProduct(productDetails);
+      } else {
+        setSelectedProduct(product);
+      }
+    } else {
+      setSelectedProduct(product);
+    }
+    
+    setLotsDetailsOpen(true);
+  };
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  const fetchProducts = async (targetPage = page, targetLimit = limit) => {
+  const fetchProducts = async (targetPage = page, targetLimit = limit, searchTerm = search) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get('http://localhost:5001/api/products', {
-        params: { page: targetPage, limit: targetLimit },
-        headers: { ...getAuthHeaders() }
-      });
-      const apiData = response.data?.data;
-      const items = apiData?.items || [];
-      setProducts(Array.isArray(items) ? items : []);
-      setTotal(apiData?.total || items.length);
-      setTotalPages(apiData?.totalPages || 1);
-      setPage(apiData?.page || targetPage);
-      setLimit(apiData?.limit || targetLimit);
+      const params = { 
+        page: targetPage, 
+        limit: targetLimit
+      };
+      
+      // Adicionar busca se houver termo
+      if (searchTerm && searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
+      
+      // Tenta primeiro a nova rota, se falhar usa a antiga
+      let response;
+      try {
+        response = await axios.get('http://localhost:5001/api/products', {
+          params,
+          headers: { ...getAuthHeaders() }
+        });
+      } catch (apiError) {
+        response = await axios.get('http://localhost:5001/api/products/db', {
+          params,
+          headers: { ...getAuthHeaders() }
+        });
+      }
+      
+      // Suporta múltiplas estruturas de resposta
+      const apiData = response.data?.data || response.data;
+      let items = apiData?.items || apiData?.products || apiData;
+      
+      // Se não for array, tenta converter
+      if (!Array.isArray(items)) {
+        items = items ? [items] : [];
+      }
+      
+      setProducts(items);
+      setTotal(apiData?.total || apiData?.pagination?.total || items.length);
+      setTotalPages(apiData?.totalPages || apiData?.pagination?.totalPages || 1);
+      setPage(apiData?.page || apiData?.pagination?.page || targetPage);
+      setLimit(apiData?.limit || apiData?.pagination?.limit || targetLimit);
     } catch (err) {
-      console.error(err);
-      setError('Erro ao carregar produtos');
+      console.error('Erro ao carregar produtos:', err);
+      
+      const errorMsg = err.response?.data?.error?.message || 
+                       err.response?.data?.message || 
+                       err.message || 
+                       'Erro ao carregar produtos';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -67,19 +182,31 @@ export default function ProductsList() {
   useEffect(() => { fetchProducts(page, limit); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Filtros locais adicionais (a busca por termo já é feita na API)
   const filtered = products.filter(p => {
-    const term = search.trim().toLowerCase();
-    const hasTerm = !term || (p.sku || '').toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term);
-    const costCond = filterCost === 'all' || (filterCost === 'with' ? p.cost > 0 : !p.cost);
-    // backend ainda não envia imposto -> placeholder
+    // Tratamento flexível para diferentes estruturas
+    const hasCost = p.currentCost?.costPerUnit || p.currentCost?.totalCost || p.cost;
+    const costCond = filterCost === 'all' || (filterCost === 'with' ? hasCost > 0 : !hasCost);
+    // backend ainda não envia imposto separado -> placeholder
     const taxCond = filterTax === 'all';
-    return hasTerm && costCond && taxCond;
+    return costCond && taxCond;
   });
+
+  // Debounce para busca
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search !== undefined) {
+        fetchProducts(1, limit, search); // Reset para página 1 ao buscar
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const openEdit = (product) => {
     setEditSku(product.sku);
     setEditName(product.name || '');
-    setEditCost(product.cost != null ? String(product.cost) : '');
+    setEditCost(''); // Custo não é mais editável diretamente, vem dos lotes
     setEditErrors({});
     setEditOpen(true);
   };
@@ -92,11 +219,6 @@ export default function ProductsList() {
   const validateEdit = () => {
     const errs = {};
     if (!editName.trim()) errs.name = 'Nome obrigatório';
-    if (editCost !== '') {
-      const num = Number(editCost.replace(',', '.'));
-      if (isNaN(num)) errs.cost = 'Custo inválido';
-      else if (num < 0) errs.cost = 'Custo >= 0';
-    }
     setEditErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -106,11 +228,9 @@ export default function ProductsList() {
     setEditSaving(true);
     try {
       const payload = { name: editName.trim() };
-      if (editCost !== '') payload.cost = Number(editCost.replace(',', '.'));
-      else payload.cost = null;
-  await axios.patch(`http://localhost:5001/api/products/${encodeURIComponent(editSku)}`, payload, { headers: { ...getAuthHeaders() } });
+      await axios.patch(`http://localhost:5001/api/products/${encodeURIComponent(editSku)}`, payload, { headers: { ...getAuthHeaders() } });
       // Atualizar localmente sem refetch completo
-      setProducts(prev => prev.map(p => p.sku === editSku ? { ...p, name: payload.name, cost: payload.cost, updatedAt: new Date().toISOString() } : p));
+      setProducts(prev => prev.map(p => p.sku === editSku ? { ...p, name: payload.name, updatedAt: new Date().toISOString() } : p));
       setSnack({ open: true, type: 'success', msg: 'Produto atualizado' });
       setEditOpen(false);
     } catch (e) {
@@ -159,13 +279,16 @@ export default function ProductsList() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
+                <TableCell width="40"></TableCell>
                 <TableCell>SKU</TableCell>
                 <TableCell>Nome</TableCell>
-                <TableCell align="right">Custo</TableCell>
-                <TableCell align="right">Imposto (%)</TableCell>
-                <TableCell align="right">Estoque Fixo</TableCell>
-                <TableCell align="right">Qtd Estoque</TableCell>
+                <TableCell align="right">Custo Atual</TableCell>
+                <TableCell align="right">Custo/Unidade</TableCell>
+                <TableCell align="right">Imposto (R$)</TableCell>
+                <TableCell align="center">Lotes</TableCell>
+                <TableCell align="right">Estoque Total</TableCell>
                 <TableCell>Criado em</TableCell>
+                <TableCell align="center">Ações</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -173,27 +296,187 @@ export default function ProductsList() {
                 <TableRow><TableCell colSpan={7} align="center"><CircularProgress size={24} /></TableCell></TableRow>
               )}
               {error && !loading && (
-                <TableRow><TableCell colSpan={7} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
               )}
               {!loading && !error && filtered.length === 0 && (
-                <TableRow><TableCell colSpan={7} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
               )}
-              {!loading && !error && filtered.map((p) => (
-                <TableRow key={p.sku} hover>
-                  <TableCell>{p.sku}</TableCell>
-                  <TableCell>{p.name || '-'}</TableCell>
-                  <TableCell align="right">{p.cost != null ? p.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}</TableCell>
-                  <TableCell align="right">{p.taxPercent != null ? p.taxPercent.toFixed(2) : '-'}</TableCell>
-                  <TableCell align="right">{p.stockFixed ? <Chip label="Sim" color="success" size="small" /> : <Chip label="Não" size="small" />}</TableCell>
-                  <TableCell align="right">{p.stock != null ? p.stock : '-'}</TableCell>
-                  <TableCell sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {p.createdAt ? dayjs(p.createdAt).format('DD/MM/YYYY HH:mm') : '-'}
-                    <IconButton size="small" onClick={() => openEdit(p)} aria-label="Editar">
-                      <EditOutlined />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {!loading && !error && filtered.map((p) => {
+                const isExpanded = expandedRows.has(p.sku);
+                const isLoadingDetails = loadingDetails.has(p.sku);
+                const fmtBRL = (v) => v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+                
+                // Tratamento flexível para diferentes estruturas de dados
+                const currentCost = p.currentCost || {};
+                const costLots = p.costLots || [];
+                
+                // Fallback para estrutura antiga (p.cost direto)
+                const purchasePrice = currentCost.purchasePrice ?? p.cost ?? null;
+                const taxPaid = currentCost.taxPaid ?? p.tax ?? null;
+                
+                // Calcular costPerUnit se não estiver disponível
+                let costPerUnit = currentCost.costPerUnit ?? currentCost.totalCost ?? p.cost ?? null;
+                if (costPerUnit == null && purchasePrice != null) {
+                  // Calcular: purchasePrice + taxPaid (se existir)
+                  costPerUnit = purchasePrice + (taxPaid || 0);
+                }
+                
+                // Na listagem usa totalLots, nos detalhes usa costLots.length
+                const lotsCount = p.totalLots ?? costLots.length ?? 0;
+                
+                // Na listagem usa currentCost.quantityAvailable, nos detalhes calcula dos lotes
+                const totalStock = currentCost.quantityAvailable ?? 
+                  p.quantityInStock ?? 
+                  p.fixedStock ?? 
+                  costLots.reduce((sum, lot) => sum + (lot.quantityAvailable || 0), 0);
+                
+                return (
+                  <React.Fragment key={p.sku || p.uuid}>
+                    <TableRow hover>
+                      <TableCell>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => toggleRow(p.sku)} 
+                          disabled={lotsCount === 0 || isLoadingDetails}
+                        >
+                          {isLoadingDetails ? <CircularProgress size={16} /> : (isExpanded ? <UpOutlined /> : <DownOutlined />)}
+                        </IconButton>
+                      </TableCell>
+                      <TableCell>{p.sku}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{p.name || '-'}</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight="medium">
+                          {fmtBRL(purchasePrice)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="primary.main" fontWeight="bold">
+                          {fmtBRL(costPerUnit)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="text.secondary">
+                          {fmtBRL(taxPaid)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title={`${lotsCount} lote(s) de compra`}>
+                          <Chip 
+                            icon={<DatabaseOutlined />}
+                            label={lotsCount} 
+                            size="small" 
+                            color={lotsCount > 0 ? "primary" : "default"}
+                            onClick={() => lotsCount > 0 && openLotsDetails(p)}
+                            sx={{ cursor: lotsCount > 0 ? 'pointer' : 'default' }}
+                          />
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Chip 
+                          label={totalStock} 
+                          size="small" 
+                          color={totalStock > 0 ? "success" : "default"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption">
+                          {p.createdAt ? dayjs(p.createdAt).format('DD/MM/YYYY') : '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={0.5} justifyContent="center">
+                          <IconButton size="small" onClick={() => openEdit(p)} aria-label="Editar">
+                            <EditOutlined />
+                          </IconButton>
+                          {costLots.length > 0 && (
+                            <IconButton size="small" color="primary" onClick={() => openLotsDetails(p)} aria-label="Ver Lotes">
+                              <InfoCircleOutlined />
+                            </IconButton>
+                          )}
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                    
+                    {/* Linha expandida com detalhes dos lotes */}
+                    {costLots.length > 0 && (
+                      <TableRow>
+                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
+                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                            <Box sx={{ margin: 2 }}>
+                              <Typography variant="h6" gutterBottom component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <DatabaseOutlined /> Lotes de Compra
+                              </Typography>
+                              <Table size="small" aria-label="lotes">
+                                <TableHead>
+                                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                                    <TableCell>Data Compra</TableCell>
+                                    <TableCell align="right">Qtd Comprada</TableCell>
+                                    <TableCell align="right">Qtd Disponível</TableCell>
+                                    <TableCell align="right">Custo Unit.</TableCell>
+                                    <TableCell align="right">Imposto</TableCell>
+                                    <TableCell align="right">Frete</TableCell>
+                                    <TableCell align="right">Outros</TableCell>
+                                    <TableCell align="right">Total Lote</TableCell>
+                                    <TableCell align="right">Custo/Un Final</TableCell>
+                                    <TableCell>NF-e</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {costLots.map((lot) => (
+                                    <TableRow key={lot.uuid}>
+                                      <TableCell>
+                                        <Typography variant="caption">
+                                          {lot.purchaseDate ? dayjs(lot.purchaseDate).format('DD/MM/YYYY HH:mm') : '-'}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell align="right">{lot.quantityPurchased || 0}</TableCell>
+                                      <TableCell align="right">
+                                        <Chip 
+                                          label={lot.quantityAvailable || 0} 
+                                          size="small"
+                                          color={lot.quantityAvailable > 0 ? "success" : "default"}
+                                        />
+                                      </TableCell>
+                                      <TableCell align="right">{fmtBRL(lot.unitCost)}</TableCell>
+                                      <TableCell align="right">{fmtBRL(lot.taxCost)}</TableCell>
+                                      <TableCell align="right">{fmtBRL(lot.shippingCost)}</TableCell>
+                                      <TableCell align="right">{fmtBRL(lot.otherCosts)}</TableCell>
+                                      <TableCell align="right">
+                                        <Typography variant="body2" fontWeight="medium">
+                                          {fmtBRL(lot.totalCost)}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        <Typography variant="body2" color="primary.main" fontWeight="bold">
+                                          {fmtBRL(lot.costPerUnit)}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell>
+                                        {lot.supplierNfeId ? (
+                                          <Tooltip title={lot.supplierNfeId}>
+                                            <Chip 
+                                              label="NF-e" 
+                                              size="small" 
+                                              variant="outlined"
+                                              color="info"
+                                            />
+                                          </Tooltip>
+                                        ) : '-'}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -219,16 +502,12 @@ export default function ProductsList() {
             error={Boolean(editErrors.name)}
             helperText={editErrors.name}
           />
-          <TextField
-            label="Custo (R$)"
-            value={editCost}
-            onChange={(e)=> setEditCost(e.target.value.replace(/[^0-9.,]/g, ''))}
-            fullWidth
-            margin="normal"
-            placeholder="Ex: 123,45"
-            error={Boolean(editErrors.cost)}
-            helperText={editErrors.cost || 'Deixe vazio para limpar custo'}
-          />
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              <strong>Nota:</strong> O custo do produto é calculado automaticamente com base nos lotes de compra. 
+              Para atualizar custos, importe novas NF-e através do botão "Importar NF-e (XML)".
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeEdit} disabled={editSaving}>Cancelar</Button>
@@ -354,6 +633,176 @@ export default function ProductsList() {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Modal de Detalhes Completos dos Lotes */}
+      <Dialog
+        open={lotsDetailsOpen}
+        onClose={() => setLotsDetailsOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <DatabaseOutlined style={{ fontSize: 24 }} />
+            <Typography variant="h5">Histórico Completo de Lotes de Custo</Typography>
+          </Stack>
+          {selectedProduct && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              SKU: <strong>{selectedProduct.sku}</strong> - {selectedProduct.name}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedProduct && selectedProduct.costLots && selectedProduct.costLots.length > 0 ? (() => {
+            const fmtBRL = (v) => v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+            return (
+            <Stack spacing={3}>
+              {/* Resumo Geral */}
+              <Box sx={{ p: 2, bgcolor: 'primary.lighter', borderRadius: 1 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="caption" color="text.secondary">Custo Atual</Typography>
+                    <Typography variant="h6">{((v) => v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-')(selectedProduct.currentCost?.costPerUnit || 0)}/un</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="caption" color="text.secondary">Total de Lotes</Typography>
+                    <Typography variant="h6">{selectedProduct.costLots.length}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="caption" color="text.secondary">Estoque Total</Typography>
+                    <Typography variant="h6">
+                      {selectedProduct.costLots.reduce((sum, lot) => sum + (lot.quantityAvailable || 0), 0)} un
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="caption" color="text.secondary">Valor em Estoque</Typography>
+                    <Typography variant="h6">
+                      {fmtBRL(selectedProduct.costLots.reduce((sum, lot) => 
+                        sum + ((lot.quantityAvailable || 0) * (lot.costPerUnit || 0)), 0
+                      ))}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
+
+              {/* Tabela Detalhada */}
+              <TableContainer>
+                <Table size="small">
+                  <TableHead sx={{ bgcolor: 'grey.100' }}>
+                    <TableRow>
+                      <TableCell><strong>Data da Compra</strong></TableCell>
+                      <TableCell align="right"><strong>Qtd Comprada</strong></TableCell>
+                      <TableCell align="right"><strong>Qtd Disponível</strong></TableCell>
+                      <TableCell align="right"><strong>% Utilizado</strong></TableCell>
+                      <TableCell align="right"><strong>Custo Unitário</strong></TableCell>
+                      <TableCell align="right"><strong>Custo Imposto</strong></TableCell>
+                      <TableCell align="right"><strong>Custo Frete</strong></TableCell>
+                      <TableCell align="right"><strong>Outros Custos</strong></TableCell>
+                      <TableCell align="right"><strong>Custo Total</strong></TableCell>
+                      <TableCell align="right"><strong>Custo/Unidade</strong></TableCell>
+                      <TableCell><strong>NF-e</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedProduct.costLots
+                      .sort((a, b) => new Date(b.purchaseDate) - new Date(a.purchaseDate))
+                      .map((lot, idx) => {
+                        const percentUsed = lot.quantityPurchased > 0
+                          ? ((lot.quantityPurchased - lot.quantityAvailable) / lot.quantityPurchased * 100).toFixed(1)
+                          : 0;
+                        const isFullyUsed = lot.quantityAvailable === 0;
+                        
+                        return (
+                          <TableRow 
+                            key={idx}
+                            sx={{ 
+                              bgcolor: isFullyUsed ? 'grey.50' : 'inherit',
+                              opacity: isFullyUsed ? 0.6 : 1
+                            }}
+                          >
+                            <TableCell>
+                              {dayjs(lot.purchaseDate).format('DD/MM/YYYY')}
+                              {isFullyUsed && (
+                                <Chip 
+                                  label="ESGOTADO" 
+                                  size="small" 
+                                  color="default" 
+                                  sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell align="right">{lot.quantityPurchased || 0}</TableCell>
+                            <TableCell align="right">
+                              <Chip 
+                                label={lot.quantityAvailable || 0}
+                                size="small"
+                                color={lot.quantityAvailable > 0 ? 'success' : 'default'}
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              <Stack direction="row" alignItems="center" spacing={1} justifyContent="flex-end">
+                                <Box sx={{ width: 60 }}>
+                                  <LinearProgress 
+                                    variant="determinate" 
+                                    value={Math.min(percentUsed, 100)}
+                                    color={percentUsed >= 90 ? 'error' : percentUsed >= 50 ? 'warning' : 'primary'}
+                                  />
+                                </Box>
+                                <Typography variant="caption">{percentUsed}%</Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell align="right">{fmtBRL(lot.unitCost || 0)}</TableCell>
+                            <TableCell align="right">{fmtBRL(lot.taxCost || 0)}</TableCell>
+                            <TableCell align="right">{fmtBRL(lot.shippingCost || 0)}</TableCell>
+                            <TableCell align="right">{fmtBRL(lot.otherCosts || 0)}</TableCell>
+                            <TableCell align="right"><strong>{fmtBRL(lot.totalCost || 0)}</strong></TableCell>
+                            <TableCell align="right">
+                              <Chip 
+                                label={fmtBRL(lot.costPerUnit || 0)}
+                                size="small"
+                                color="primary"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {lot.supplierNfeId ? (
+                                <Tooltip title={`NF-e: ${lot.supplierNfeId}`}>
+                                  <Chip 
+                                    icon={<InfoCircleOutlined />}
+                                    label={lot.supplierNfeId.substring(0, 8) + '...'}
+                                    size="small"
+                                    variant="outlined"
+                                    color="info"
+                                  />
+                                </Tooltip>
+                              ) : '-'}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Legenda */}
+              <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  <strong>Dica:</strong> Os lotes estão ordenados por data de compra (mais recente primeiro). 
+                  Lotes esgotados aparecem com fundo cinza. O percentual de utilização indica quanto do lote já foi consumido.
+                </Typography>
+              </Box>
+            </Stack>
+            );
+          })() : (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+              <Typography color="text.secondary">Nenhum lote de custo disponível</Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLotsDetailsOpen(false)}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar open={snack.open} autoHideDuration={3000} onClose={() => setSnack(s => ({ ...s, open:false }))} anchorOrigin={{ vertical:'bottom', horizontal:'center' }}>
         <Alert severity={snack.type} variant="filled" onClose={() => setSnack(s => ({ ...s, open:false }))}>{snack.msg}</Alert>
       </Snackbar>
