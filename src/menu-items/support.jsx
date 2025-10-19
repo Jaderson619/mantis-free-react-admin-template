@@ -1,34 +1,41 @@
 // assets
-import { ChromeOutlined, QuestionOutlined } from '@ant-design/icons';
+import { ChromeOutlined, QuestionOutlined, SettingOutlined } from '@ant-design/icons';
 
 // icons
 const icons = {
   ChromeOutlined,
-  QuestionOutlined
+  QuestionOutlined,
+  SettingOutlined
 };
 
-// ==============================|| MENU ITEMS - SAMPLE PAGE & DOCUMENTATION ||============================== //
+// ==============================|| MENU ITEMS - SUPORTE & CONFIGURAÇÕES ||============================== //
 
 const support = {
   id: 'support',
-  title: 'Support',
+  title: 'Suporte',
   type: 'group',
   children: [
     {
       id: 'sample-page',
-      title: 'Sample Page',
+      title: 'Página Exemplo',
       type: 'item',
       url: '/sample-page',
       icon: icons.ChromeOutlined
     },
     {
-      id: 'documentation',
-      title: 'Documentation',
+      id: 'theme-settings',
+      title: 'Configurações de Tema',
       type: 'item',
-      url: 'https://codedthemes.gitbook.io/mantis/',
+      url: '/settings/theme',
+      icon: icons.SettingOutlined
+    },
+    {
+      id: 'help',
+      title: 'Ajuda',
+      type: 'item',
+      url: '#',
       icon: icons.QuestionOutlined,
-      external: true,
-      target: true
+      external: false
     }
   ]
 };

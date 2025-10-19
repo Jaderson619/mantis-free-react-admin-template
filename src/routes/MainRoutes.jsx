@@ -16,6 +16,9 @@ const ProductsList = Loadable(lazy(() => import('pages/products/list')));
 const OrdersPage = Loadable(lazy(() => import('pages/orders/index')));
 const SamplePage = Loadable(lazy(() => import('pages/extra-pages/sample-page')));
 
+// render - settings
+const ThemeSettings = Loadable(lazy(() => import('pages/settings/theme-settings')));
+
 // ==============================|| MAIN ROUTING ||============================== //
 
 const MainRoutes = {
@@ -70,6 +73,15 @@ const MainRoutes = {
     {
       path: 'typography',
       element: <Typography />
+    },
+    {
+      path: 'settings',
+      children: [
+        {
+          path: 'theme',
+          element: <ThemeSettings />
+        }
+      ]
     }
   ]
 };

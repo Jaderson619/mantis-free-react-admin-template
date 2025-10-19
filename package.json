@@ -1,12 +1,12 @@
 {
-  "name": "mantis-free-react-admin-template",
-  "version": "1.3.0",
+  "name": "appgestor-vendas-frontend",
+  "version": "2.0.0",
   "private": true,
-  "homepage": "https://mantisdashboard.io/free",
+  "homepage": ".",
   "author": {
-    "name": "CodedThemes",
-    "email": "codedthemes@gmail.com",
-    "url": "https://codedthemes.com/"
+    "name": "Jaderson Jonas Silva",
+    "email": "seu-email@exemplo.com",
+    "url": ""
   },
   "scripts": {
     "start": "vite",
@@ -27,6 +27,7 @@
     "@fontsource/public-sans": "^5.0.17",
     "@fontsource/roboto": "^5.0.12",
     "@mui/base": "^5.0.0-beta.38",
+    "@mui/icons-material": "^5.18.0",
     "@mui/lab": "^5.0.0-alpha.167",
     "@mui/material": "^5.15.12",
     "@mui/system": "^5.15.12",

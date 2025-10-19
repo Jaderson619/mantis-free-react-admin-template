@@ -7,6 +7,8 @@ import Stack from '@mui/material/Stack';
 // ==============================|| FOOTER - AUTHENTICATION ||============================== //
 
 export default function AuthFooter() {
+  const currentYear = new Date().getFullYear();
+  
   return (
     <Container maxWidth="xl">
       <Stack
@@ -16,10 +18,7 @@ export default function AuthFooter() {
         textAlign={{ xs: 'center', sm: 'inherit' }}
       >
         <Typography variant="subtitle2" color="secondary">
-          This site is protected by{' '}
-          <Typography component={Link} variant="subtitle2" href="#mantis-privacy" target="_blank" underline="hover">
-            Privacy Policy
-          </Typography>
+          © {currentYear} AppGestor Vendas. Todos os direitos reservados.
         </Typography>
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 3 }} textAlign={{ xs: 'center', sm: 'inherit' }}>
@@ -27,31 +26,28 @@ export default function AuthFooter() {
             variant="subtitle2"
             color="secondary"
             component={Link}
-            href="https://codedthemes.com"
-            target="_blank"
+            href="#"
             underline="hover"
           >
-            Terms and Conditions
+            Termos de Uso
           </Typography>
           <Typography
             variant="subtitle2"
             color="secondary"
             component={Link}
-            href="https://codedthemes.com"
-            target="_blank"
+            href="#"
             underline="hover"
           >
-            Privacy Policy
+            Política de Privacidade
           </Typography>
           <Typography
             variant="subtitle2"
             color="secondary"
             component={Link}
-            href="https://codedthemes.com"
-            target="_blank"
+            href="#"
             underline="hover"
           >
-            CA Privacy Notice
+            Suporte
           </Typography>
         </Stack>
       </Stack>

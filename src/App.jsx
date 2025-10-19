@@ -2,18 +2,17 @@ import { RouterProvider } from 'react-router-dom';
 
 // project import
 import router from 'routes';
-import ThemeCustomization from 'themes';
-
+import CustomThemeProvider from 'theme/ThemeProvider';
 import ScrollTop from 'components/ScrollTop';
 
-// ==============================|| APP - THEME, ROUTER, LOCAL ||============================== //
+// ==============================|| APP - THEME, ROUTER ||============================== //
 
 export default function App() {
   return (
-    <ThemeCustomization>
+    <CustomThemeProvider>
       <ScrollTop>
         <RouterProvider router={router} />
       </ScrollTop>
-    </ThemeCustomization>
+    </CustomThemeProvider>
   );
 }
