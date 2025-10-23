@@ -39,6 +39,13 @@ import CarOutlined from '@ant-design/icons/CarOutlined';
 import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
 import CopyOutlined from '@ant-design/icons/CopyOutlined';
 import SearchOutlined from '@ant-design/icons/SearchOutlined';
+import CreditCardOutlined from '@ant-design/icons/CreditCardOutlined';
+import TruckOutlined from '@ant-design/icons/TruckOutlined';
+import ShakeOutlined from '@ant-design/icons/ShakeOutlined';
+import WalletOutlined from '@ant-design/icons/WalletOutlined';
+import DropboxOutlined from '@ant-design/icons/DropboxOutlined';
+import RiseOutlined from '@ant-design/icons/RiseOutlined';
+import GoldOutlined from '@ant-design/icons/GoldOutlined';
 
 // project import
 import MainCard from 'components/MainCard';
@@ -87,7 +94,12 @@ export default function OrdersPage() {
           console.log('🔍 Processando pedido:', {
             id: order.id,
             orderNumber: order.orderNumber,
-            total: order.total,
+            totalPaidByCustomer: order.totalPaidByCustomer,
+            shippingCost: order.shippingCost,
+            sellerShippingCost: order.sellerShippingCost,
+            marketplaceFee: order.marketplaceFee,
+            totalProductCost: order.totalProductCost,
+            netProfit: order.netProfit,
             itemCount: order.itemCount,
             items: order.items?.length
           });
@@ -112,23 +124,44 @@ export default function OrdersPage() {
               sku: item.product?.sku,
               name: item.product?.name,
               quantity: item.quantity,
-              unitPrice: item.unitPrice
+              unitPrice: item.unitPrice,
+              productCost: item.productCost,
+              itemTotalCost: item.itemTotalCost
             });
 
             const quantity = num(item.quantity || 1);
             const unitPrice = num(item.unitPrice);
             const totalPrice = num(item.totalPrice || (unitPrice * quantity));
             
-            // Custos e taxas (usar valores do pedido ou item)
+            // ===== NOVOS CAMPOS DA API =====
+            // Valores financeiros do pedido (nível order)
+            const totalPaidByCustomer = num(order.totalPaidByCustomer || totalPrice);
             const shippingCost = num(order.shippingCost || 0);
-            const marketplaceFees = num(item.marketplaceFees || order.marketplaceFees || order.fees || 0);
-            const cost = num(item.cost || 0);
-            const tax = num(item.tax || 0);
+            const sellerShippingCost = num(order.sellerShippingCost || 0);
+            const marketplaceFee = num(order.marketplaceFee || 0);
+            const grossRevenue = num(order.grossRevenue || 0);
+            const taxAmount = num(order.taxAmount || 0);
+            const totalProductCost = num(order.totalProductCost || 0);
+            const netProfit = num(order.netProfit || 0);
             
-            // Cálculos
-            const netValue = totalPrice - marketplaceFees - shippingCost;
-            const profit = netValue - cost - tax;
-            const profitPercentage = totalPrice > 0 ? `${((profit / totalPrice) * 100).toFixed(2)}%` : '0%';
+            // Identificar quem paga o frete
+            const shippingPaidBy = sellerShippingCost > 0 ? 'seller' : 'customer';
+            const shippingLabel = shippingPaidBy === 'seller' 
+              ? `Frete (Vendedor)`
+              : `Frete (Cliente)`;
+            const actualShippingCost = shippingPaidBy === 'seller' 
+              ? sellerShippingCost 
+              : shippingCost;
+            
+            // Custos do item (nível item)
+            const productCost = num(item.productCost || 0);
+            const lotCost = num(item.lotCost || 0);
+            const itemTotalCost = num(item.itemTotalCost || productCost * quantity);
+            
+            // Cálculos de margem
+            const profitMargin = totalPaidByCustomer > 0 
+              ? ((netProfit / totalPaidByCustomer) * 100).toFixed(2) 
+              : '0.00';
 
             return {
               id: `#${order.orderNumber}-${item.id || index}`,
@@ -136,17 +169,35 @@ export default function OrdersPage() {
               customerId: order.orderNumber || order.id?.toString() || '',
               product: item.product?.name || item.title || 'Produto não informado',
               sku: item.product?.sku || item.sku || '-',
-              totalValue: totalPrice,
+              
+              // ===== VALORES FINANCEIROS ATUALIZADOS =====
+              totalPaidByCustomer,      // Total pago pelo cliente
+              totalValue: totalPrice,   // Valor do item
+              shippingCost,             // Frete (pago pelo cliente)
+              sellerShippingCost,       // Frete (pago pelo vendedor)
+              shippingPaidBy,           // Quem paga o frete: 'seller' ou 'customer'
+              shippingLabel,            // Label formatada: "Frete (Vendedor)" ou "Frete (Cliente)"
+              actualShippingCost,       // Custo real do frete
+              marketplaceFee,           // Taxa Mercado Livre
+              grossRevenue,             // Receita bruta (total - frete - taxa)
+              taxAmount,                // Imposto (8%)
+              totalProductCost,         // Custo total dos produtos
+              productCost,              // Custo unitário do produto
+              itemTotalCost,            // Custo total deste item
+              netProfit,                // Lucro líquido
+              profitMargin,             // Margem de lucro %
+              
+              // Campos legados (mantidos para compatibilidade)
               fees: {
-                marketplace: marketplaceFees,
+                marketplace: marketplaceFee,
                 shipping: shippingCost,
-                total: marketplaceFees + shippingCost
+                total: marketplaceFee + shippingCost
               },
-              netValue,
-              shippingCost,
-              commissionCost: marketplaceFees,
-              profit,
-              profitPercentage,
+              netValue: grossRevenue,
+              commissionCost: marketplaceFee,
+              profit: netProfit,
+              profitPercentage: `${profitMargin}%`,
+              
               date: orderDate.format('DD/MM/YYYY'),
               time: orderDate.format('HH:mm'),
               status: orderStatus,
@@ -224,8 +275,72 @@ export default function OrdersPage() {
     return null;
   };
 
+  // Calcular totais para os cards de resumo
+  const calculateSummary = () => {
+    const totalRevenue = orders.reduce((sum, order) => sum + order.totalPaidByCustomer, 0);
+    const totalCosts = orders.reduce((sum, order) => sum + order.totalProductCost + order.taxAmount, 0);
+    const totalProfit = orders.reduce((sum, order) => sum + order.netProfit, 0);
+    const averageMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(2) : '0.00';
+
+    return { totalRevenue, totalCosts, totalProfit, averageMargin };
+  };
+
+  const summary = calculateSummary();
+
   return (
     <>
+      {/* Cards de Resumo Financeiro */}
+      <Grid container spacing={3} mb={3}>
+        <Grid item xs={12} sm={6} md={3}>
+          <MainCard>
+            <Stack spacing={0.5}>
+              <Typography variant="h6" color="text.secondary">
+                Receita Total
+              </Typography>
+              <Typography variant="h4" color="success.main">
+                R$ {summary.totalRevenue.toFixed(2)}
+              </Typography>
+            </Stack>
+          </MainCard>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MainCard>
+            <Stack spacing={0.5}>
+              <Typography variant="h6" color="text.secondary">
+                Custos Totais
+              </Typography>
+              <Typography variant="h4" color="error.main">
+                R$ {summary.totalCosts.toFixed(2)}
+              </Typography>
+            </Stack>
+          </MainCard>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MainCard>
+            <Stack spacing={0.5}>
+              <Typography variant="h6" color="text.secondary">
+                Lucro Total
+              </Typography>
+              <Typography variant="h4" color={summary.totalProfit >= 0 ? 'success.main' : 'error.main'}>
+                R$ {summary.totalProfit.toFixed(2)}
+              </Typography>
+            </Stack>
+          </MainCard>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MainCard>
+            <Stack spacing={0.5}>
+              <Typography variant="h6" color="text.secondary">
+                Margem Média
+              </Typography>
+              <Typography variant="h4" color={summary.averageMargin >= 0 ? 'info.main' : 'error.main'}>
+                {summary.averageMargin}%
+              </Typography>
+            </Stack>
+          </MainCard>
+        </Grid>
+      </Grid>
+
       <Grid container spacing={3} mb={2}>
         <Grid item xs={12} md={6}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -295,12 +410,7 @@ export default function OrdersPage() {
                 </TableCell>
                 <TableCell>Info</TableCell>
                 <TableCell>Produto</TableCell>
-                <TableCell align="right">Valor</TableCell>
-                <TableCell align="right">Taxas</TableCell>
-                <TableCell align="right">Líquido</TableCell>
-                <TableCell align="right">Frete</TableCell>
-                <TableCell align="right">Comissão</TableCell>
-                <TableCell align="right">Lucro</TableCell>
+                <TableCell>Valores Financeiros</TableCell>
                 <TableCell>Entrega</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="center">Ações</TableCell>
@@ -309,7 +419,7 @@ export default function OrdersPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={12} align="center" sx={{ py: 10 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 10 }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       <Typography variant="h6">Carregando pedidos...</Typography>
                       <Typography variant="body2" color="text.secondary">Por favor, aguarde</Typography>
@@ -318,7 +428,7 @@ export default function OrdersPage() {
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} align="center" sx={{ py: 10 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 10 }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       <UnorderedListOutlined style={{ fontSize: '3rem', opacity: 0.3 }} />
                       <Typography variant="h6">Nenhum pedido encontrado</Typography>
@@ -402,37 +512,137 @@ export default function OrdersPage() {
                       </Box>
                     </Box>
                   </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="primary.main" fontWeight="bold">
-                      R$ {order.totalValue.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="text.secondary">-R$ {order.fees.marketplace.toFixed(2)}</Typography>
-                    <Typography variant="body2" color="text.secondary">-R$ {order.fees.shipping.toFixed(2)}</Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="primary.main">
-                      R$ {order.netValue.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="text.secondary">
-                      -R$ {order.shippingCost.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="text.secondary">
-                      -R$ {order.commissionCost.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="success.main" fontWeight="bold">
-                      R$ {order.profit.toFixed(2)}
-                    </Typography>
-                    <Typography variant="caption" color="success.main">
-                      ({order.profitPercentage})
-                    </Typography>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 220 }}>
+                      {/* Total Pago pelo Cliente */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CreditCardOutlined style={{ fontSize: '1rem', color: theme.palette.success.main }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
+                          Total Pago:
+                        </Typography>
+                        <Typography variant="body2" fontWeight="bold" color="success.main">
+                          R$ {order.totalPaidByCustomer.toFixed(2)}
+                        </Typography>
+                      </Box>
+                      
+                      {/* Frete - Dinâmico baseado em quem paga */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TruckOutlined style={{ 
+                          fontSize: '1rem', 
+                          color: order.shippingPaidBy === 'seller' 
+                            ? theme.palette.error.main 
+                            : theme.palette.text.secondary 
+                        }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
+                          {order.shippingLabel}:
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          color={order.shippingPaidBy === 'seller' ? 'error.main' : 'text.secondary'}
+                          fontWeight={order.shippingPaidBy === 'seller' ? 'medium' : 'normal'}
+                        >
+                          {order.shippingPaidBy === 'seller' ? '-' : ''}R$ {order.actualShippingCost.toFixed(2)}
+                        </Typography>
+                        {order.shippingPaidBy === 'seller' && (
+                          <Chip 
+                            label="Custo" 
+                            size="small" 
+                            sx={{ 
+                              height: 18, 
+                              fontSize: '0.65rem',
+                              bgcolor: theme.palette.error.lighter || 'rgba(244, 67, 54, 0.08)',
+                              color: theme.palette.error.main,
+                              fontWeight: 600
+                            }} 
+                          />
+                        )}
+                      </Box>
+                      
+                      {/* Taxa Mercado Livre */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <ShakeOutlined style={{ fontSize: '1rem', color: theme.palette.warning.main }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
+                          Taxa ML:
+                        </Typography>
+                        <Typography variant="body2" color="warning.main">
+                          -R$ {order.marketplaceFee.toFixed(2)}
+                        </Typography>
+                      </Box>
+                      
+                      {/* Receita Bruta */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <WalletOutlined style={{ fontSize: '1rem', color: theme.palette.info.main }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
+                          Bruto:
+                        </Typography>
+                        <Typography variant="body2" fontWeight="medium" color="info.main">
+                          R$ {order.grossRevenue.toFixed(2)}
+                        </Typography>
+                      </Box>
+                      
+                      {/* Custo dos Produtos */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <DropboxOutlined style={{ fontSize: '1rem', color: theme.palette.error.main }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
+                          Custos:
+                        </Typography>
+                        <Typography variant="body2" color="error.main">
+                          -R$ {order.totalProductCost.toFixed(2)}
+                        </Typography>
+                      </Box>
+                      
+                      {/* Impostos */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <RiseOutlined style={{ fontSize: '1rem', color: theme.palette.secondary.main }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
+                          Impostos:
+                        </Typography>
+                        <Typography variant="body2" color="secondary.main">
+                          -R$ {order.taxAmount.toFixed(2)}
+                        </Typography>
+                      </Box>
+                      
+                      {/* Lucro Líquido */}
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 1,
+                        bgcolor: order.netProfit >= 0 
+                          ? (theme.palette.success.lighter || 'rgba(76, 175, 80, 0.08)')
+                          : (theme.palette.error.lighter || 'rgba(244, 67, 54, 0.08)'),
+                        px: 1,
+                        py: 0.5,
+                        borderRadius: 1,
+                        mt: 0.5
+                      }}>
+                        <GoldOutlined style={{ 
+                          fontSize: '1rem', 
+                          color: order.netProfit >= 0 ? theme.palette.success.main : theme.palette.error.main 
+                        }} />
+                        <Typography 
+                          variant="caption" 
+                          color={order.netProfit >= 0 ? 'success.main' : 'error.main'} 
+                          fontWeight="medium" 
+                          sx={{ minWidth: 80 }}
+                        >
+                          Lucro:
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          fontWeight="bold" 
+                          color={order.netProfit >= 0 ? 'success.main' : 'error.main'}
+                        >
+                          R$ {order.netProfit.toFixed(2)}
+                        </Typography>
+                        <Typography 
+                          variant="caption" 
+                          color={order.netProfit >= 0 ? 'success.main' : 'error.main'} 
+                          sx={{ ml: 'auto' }}
+                        >
+                          ({order.profitMargin}%)
+                        </Typography>
+                      </Box>
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
