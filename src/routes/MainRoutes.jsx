@@ -11,6 +11,7 @@ const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/index')));
 const ProductCreate = Loadable(lazy(() => import('pages/products/create')));
 const ProductsList = Loadable(lazy(() => import('pages/products/list')));
+const ProductPricing = Loadable(lazy(() => import('pages/products/pricing')));
 
 // render - sample page
 const OrdersPage = Loadable(lazy(() => import('pages/orders/index')));
@@ -61,6 +62,10 @@ const MainRoutes = {
     {
       path: 'produtos/novo',
       element: <ErrorBoundary><ProductCreate /></ErrorBoundary>
+    },
+    {
+      path: 'produtos/precificacao',
+      element: <ErrorBoundary><ProductPricing /></ErrorBoundary>
     },
     {
       path: 'sample-page',

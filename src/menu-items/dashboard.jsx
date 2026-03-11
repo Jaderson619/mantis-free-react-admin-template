@@ -1,9 +1,10 @@
 // assets
-import { DashboardOutlined } from '@ant-design/icons';
+import { DashboardOutlined, CalculatorOutlined } from '@ant-design/icons';
 
 // icons
 const icons = {
-  DashboardOutlined
+  DashboardOutlined,
+  CalculatorOutlined
 };
 
 // ==============================|| MENU ITEMS - DASHBOARD ||============================== //
@@ -30,11 +31,19 @@ const dashboard = {
       breadcrumbs: false
     },
     {
-  id: 'produtos',
-  title: 'Produtos',
-  type: 'item',
-  url: '/produtos',
+      id: 'produtos',
+      title: 'Produtos',
+      type: 'item',
+      url: '/produtos',
       icon: icons.DashboardOutlined,
+      breadcrumbs: false
+    },
+    {
+      id: 'precificacao',
+      title: 'Precificador E-commerce',
+      type: 'item',
+      url: '/produtos/precificacao',
+      icon: icons.CalculatorOutlined,
       breadcrumbs: false
     }
   ]

@@ -14,6 +14,7 @@ import UpOutlined from '@ant-design/icons/UpOutlined';
 import InfoCircleOutlined from '@ant-design/icons/InfoCircleOutlined';
 import DatabaseOutlined from '@ant-design/icons/DatabaseOutlined';
 import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
+import CalculatorOutlined from '@ant-design/icons/CalculatorOutlined';
 
 export default function ProductsList() {
   const navigate = useNavigate();
@@ -22,7 +23,6 @@ export default function ProductsList() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [filterCost, setFilterCost] = useState('all');
-  const [filterTax, setFilterTax] = useState('all');
   
   // --- NOVOS STATES PARA ORDENAÇÃO ---
   const [order, setOrder] = useState('desc');
@@ -256,9 +256,7 @@ export default function ProductsList() {
     // Tratamento flexível para diferentes estruturas
     const hasCost = p.currentCost?.costPerUnit || p.currentCost?.totalCost || p.cost;
     const costCond = filterCost === 'all' || (filterCost === 'with' ? hasCost > 0 : !hasCost);
-    // backend ainda não envia imposto separado -> placeholder
-    const taxCond = filterTax === 'all';
-    return costCond && taxCond;
+    return costCond;
   });
 
   // Ordenação
@@ -765,13 +763,6 @@ export default function ProductsList() {
               </Select>
             </Grid>
             <Grid item xs={12} md={3}>
-              <Select fullWidth size="small" value={filterTax} onChange={(e) => setFilterTax(e.target.value)}>
-                <MenuItem value="all">Todos</MenuItem>
-                <MenuItem value="with">Com Imposto</MenuItem>
-                <MenuItem value="without">Sem Imposto</MenuItem>
-              </Select>
-            </Grid>
-            <Grid item xs={12} md={3}>
               <Stack direction="row" spacing={1}>
                 <Button startIcon={<ReloadOutlined />} onClick={() => fetchProducts(page, limit)} variant="outlined">Recarregar</Button>
                 <Button startIcon={<UploadOutlined />} color="secondary" variant="contained" onClick={()=> { 
@@ -819,7 +810,6 @@ export default function ProductsList() {
                   </TableSortLabel>
                 </TableCell>
                 <TableCell align="right">Custo Manual</TableCell>
-                <TableCell align="right">Imposto/Unid.</TableCell>
                 <TableCell align="right">Custo Final</TableCell>
                 <TableCell align="center">Lotes</TableCell>
                 <TableCell align="right" sortDirection={orderBy === 'stock' ? order : false}>
@@ -854,13 +844,13 @@ export default function ProductsList() {
             </TableHead>
             <TableBody>
               {loading && (
-                <TableRow><TableCell colSpan={12} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} align="center"><CircularProgress size={24} /></TableCell></TableRow>
               )}
               {error && !loading && (
-                <TableRow><TableCell colSpan={12} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
               )}
               {!loading && !error && sortedFiltered.length === 0 && (
-                <TableRow><TableCell colSpan={12} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
               )}
               {!loading && !error && sortedFiltered.map((p) => {
                 const isExpanded = expandedRows.has(p.sku);
@@ -874,8 +864,7 @@ export default function ProductsList() {
                 // Dados de custo (usando nomes corretos da API)
                 const unitCostNfe = currentCost.unitCost ?? currentCost.price ?? 0;
                 const unitCostManual = p.cost;
-                const taxPerUnit = currentCost.taxPerUnit ?? currentCost.taxPaid ?? 0;        // Imposto por unidade
-                const costPerUnit = unitCostManual != null ? (unitCostManual + taxPerUnit) : (currentCost.costPerUnit ?? currentCost.unitCost ?? 0); // Custo total por unidade
+                const costPerUnit = unitCostManual != null ? unitCostManual : (currentCost.costPerUnit ?? currentCost.unitCost ?? 0); // Custo total por unidade
 
                 const totalStock = currentCost.quantityAvailable || 0; // Estoque total
                 const lotsCount = p.totalLots || costLots.length || 0; // Total de lotes
@@ -904,11 +893,6 @@ export default function ProductsList() {
                       <TableCell align="right">
                         <Typography variant="body2" color={unitCostManual != null ? "warning.main" : "text.secondary"} fontWeight={unitCostManual != null ? "medium" : "regular"}>
                           {unitCostManual != null ? fmtBRL(unitCostManual) : '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" color="text.secondary">
-                          {taxPerUnit ? fmtBRL(taxPerUnit) : '-'}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
@@ -947,13 +931,22 @@ export default function ProductsList() {
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" spacing={0.5} justifyContent="center">
-                          <IconButton size="small" onClick={() => openEdit(p)} aria-label="Editar">
-                            <EditOutlined />
-                          </IconButton>
-                          {lotsCount > 0 && (
-                            <IconButton size="small" color="primary" onClick={() => openLotsDetails(p)} aria-label="Ver Lotes">
-                              <InfoCircleOutlined />
+                          <Tooltip title="Precificar">
+                            <IconButton size="small" onClick={() => navigate(`/produtos/precificacao?sku=${encodeURIComponent(p.sku)}`)} color="success">
+                              <CalculatorOutlined />
                             </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Editar">
+                            <IconButton size="small" onClick={() => openEdit(p)} aria-label="Editar">
+                              <EditOutlined />
+                            </IconButton>
+                          </Tooltip>
+                          {lotsCount > 0 && (
+                            <Tooltip title="Ver Lotes">
+                              <IconButton size="small" color="primary" onClick={() => openLotsDetails(p)} aria-label="Ver Lotes">
+                                <InfoCircleOutlined />
+                              </IconButton>
+                            </Tooltip>
                           )}
                         </Stack>
                       </TableCell>
@@ -962,7 +955,7 @@ export default function ProductsList() {
                     {/* Linha expandida com detalhes dos lotes */}
                     {costLots.length > 0 && (
                       <TableRow>
-                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={12}>
+                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={11}>
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ margin: 2 }}>
                               <Typography variant="h6" gutterBottom component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -975,7 +968,6 @@ export default function ProductsList() {
                                     <TableCell align="right">Qtd Comprada</TableCell>
                                     <TableCell align="right">Qtd Disponível</TableCell>
                                     <TableCell align="right">Custo Unit.</TableCell>
-                                    <TableCell align="right">Imposto</TableCell>
                                     <TableCell align="right">Frete</TableCell>
                                     <TableCell align="right">Outros</TableCell>
                                     <TableCell align="right">Total Lote</TableCell>
@@ -1000,7 +992,6 @@ export default function ProductsList() {
                                         />
                                       </TableCell>
                                       <TableCell align="right">{fmtBRL(lot.unitCost)}</TableCell>
-                                      <TableCell align="right">{fmtBRL(lot.taxCost)}</TableCell>
                                       <TableCell align="right">{fmtBRL(lot.shippingCost)}</TableCell>
                                       <TableCell align="right">{fmtBRL(lot.otherCosts)}</TableCell>
                                       <TableCell align="right">
@@ -1076,16 +1067,13 @@ export default function ProductsList() {
               <strong>Resumo de Custos Atuais NFe/Lotes:</strong>
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">
-              • Custo de Compra (S/ Imposto): {Number(editNfeCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block">
-              • Impostos Atuais: + {Number(editTaxPerUnit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              • Custo de Compra (Base): {Number(editNfeCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 'bold' }}>
               • Custo Final pelo Lote: = {Number(editCalculatedCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              <strong>Nota:</strong> Se o custo manual for preenchido, ele assumirá o controle, será somado aos impostos, e passará a ser o Custo Final na tabela.
+              <strong>Nota:</strong> Se o custo manual for preenchido, ele assumirá o controle e passará a ser o Custo Final na tabela.
             </Typography>
           </Box>
         </DialogContent>
@@ -1723,7 +1711,6 @@ export default function ProductsList() {
                       <TableCell align="right"><strong>Qtd Disponível</strong></TableCell>
                       <TableCell align="right"><strong>% Utilizado</strong></TableCell>
                       <TableCell align="right"><strong>Custo Unitário</strong></TableCell>
-                      <TableCell align="right"><strong>Custo Imposto</strong></TableCell>
                       <TableCell align="right"><strong>Custo Frete</strong></TableCell>
                       <TableCell align="right"><strong>Outros Custos</strong></TableCell>
                       <TableCell align="right"><strong>Custo Total</strong></TableCell>
@@ -1780,7 +1767,6 @@ export default function ProductsList() {
                               </Stack>
                             </TableCell>
                             <TableCell align="right">{fmtBRL(lot.unitCost || 0)}</TableCell>
-                            <TableCell align="right">{fmtBRL(lot.taxCost || 0)}</TableCell>
                             <TableCell align="right">{fmtBRL(lot.shippingCost || 0)}</TableCell>
                             <TableCell align="right">{fmtBRL(lot.otherCosts || 0)}</TableCell>
                             <TableCell align="right"><strong>{fmtBRL(lot.totalCost || 0)}</strong></TableCell>
