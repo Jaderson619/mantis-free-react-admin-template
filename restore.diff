@@ -1,0 +1,987 @@
+diff --git a/src/pages/products/list.jsx b/src/pages/products/list.jsx
+index 8657be3..28f93c8 100644
+--- a/src/pages/products/list.jsx
++++ b/src/pages/products/list.jsx
+@@ -1,5 +1,5 @@
+ import React, { useEffect, useState, useCallback, useRef } from 'react';
+-import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText, Collapse, Tooltip, Divider } from '@mui/material';
++import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText, Collapse, Tooltip, Divider } from '@mui/material';
+ import { useNavigate } from 'react-router-dom';
+ import MainCard from 'components/MainCard';
+ import DialogErrorBoundary from 'components/DialogErrorBoundary';
+@@ -23,6 +23,11 @@ export default function ProductsList() {
+   const [search, setSearch] = useState('');
+   const [filterCost, setFilterCost] = useState('all');
+   const [filterTax, setFilterTax] = useState('all');
++  
++  // --- NOVOS STATES PARA ORDENAÇÃO ---
++  const [order, setOrder] = useState('desc');
++  const [orderBy, setOrderBy] = useState('createdAt');
++
+   const [page, setPage] = useState(1);
+   const [limit, setLimit] = useState(50);
+   const [total, setTotal] = useState(0);
+@@ -31,6 +36,9 @@ export default function ProductsList() {
+   const [editSku, setEditSku] = useState('');
+   const [editName, setEditName] = useState('');
+   const [editCost, setEditCost] = useState('');
++  const [editCalculatedCost, setEditCalculatedCost] = useState('');
++  const [editNfeCost, setEditNfeCost] = useState('');
++  const [editTaxPerUnit, setEditTaxPerUnit] = useState('');
+   const [editSaving, setEditSaving] = useState(false);
+   const [snack, setSnack] = useState({ open: false, type: 'success', msg: '' });
+   const [editErrors, setEditErrors] = useState({});
+@@ -80,13 +88,23 @@ export default function ProductsList() {
+       
+       const productDetails = response.data?.data || response.data;
+       
+-      if (productDetails) {
+-        // Atualizar o produto na lista com os detalhes completos (incluindo costLots)
+-        if (isMountedRef.current) {
+-          setProducts(prev => prev.map(p => p.sku === sku ? { ...p, ...productDetails } : p));
+-        }
+-        
+-        // Retornar os detalhes para uso imediato
++        if (productDetails) {
++          // Atualizar o produto na lista com os detalhes completos (incluindo costLots)
++          if (isMountedRef.current) {
++            setProducts(prev => prev.map(p => {
++              if (p.sku === sku) {
++                return {
++                  ...p,
++                  ...productDetails,
++                  currentCost: {
++                    ...(p.currentCost || {}),
++                    ...(productDetails.currentCost || {})
++                  }
++                };
++              }
++              return p;
++            }));
++          }        // Retornar os detalhes para uso imediato
+         return productDetails;
+       }
+       return null;
+@@ -149,7 +167,16 @@ export default function ProductsList() {
+     return token ? { Authorization: `Bearer ${token}` } : {};
+   };
+ 
+-  const fetchProducts = async (targetPage = page, targetLimit = limit, searchTerm = search) => {
++  const handleRequestSort = (property) => {
++    const isAsc = orderBy === property && order === 'asc';
++    const newOrder = isAsc ? 'desc' : 'asc';
++    setOrder(newOrder);
++    setOrderBy(property);
++    setPage(1); // Voltar à primeira página ao reordenar
++    fetchProducts(1, limit, search, property, newOrder);
++  };
++
++  const fetchProducts = async (targetPage = page, targetLimit = limit, searchTerm = search, sortField = orderBy, sortDir = order) => {
+     setLoading(true);
+     setError(null);
+     try {
+@@ -162,6 +189,12 @@ export default function ProductsList() {
+       if (searchTerm && searchTerm.trim()) {
+         params.search = searchTerm.trim();
+       }
++
++      // Adicionar ordenação para a API se suportado
++      if (sortField) {
++        params.sortBy = sortField;
++        params.sortOrder = sortDir;
++      }
+       
+       // Tenta primeiro a nova rota, se falhar usa a antiga
+       let response;
+@@ -228,6 +261,45 @@ export default function ProductsList() {
+     return costCond && taxCond;
+   });
+ 
++  // Ordenação
++  const sortedFiltered = [...filtered].sort((a, b) => {
++    let aValue, bValue;
++    
++    switch(orderBy) {
++      case 'sku':
++        aValue = String(a.sku || '').toLowerCase();
++        bValue = String(b.sku || '').toLowerCase();
++        break;
++      case 'name':
++        aValue = String(a.name || '').toLowerCase();
++        bValue = String(b.name || '').toLowerCase();
++        break;
++      case 'createdAt':
++        aValue = new Date(a.createdAt || 0).getTime();
++        bValue = new Date(b.createdAt || 0).getTime();
++        break;
++      case 'lastPurchase':
++        aValue = new Date(a.lastPurchaseDate || 0).getTime();
++        bValue = new Date(b.lastPurchaseDate || 0).getTime();
++        break;
++      case 'cost':
++        aValue = Number(a.currentCost?.costPerUnit || a.cost || 0);
++        bValue = Number(b.currentCost?.costPerUnit || b.cost || 0);
++        break;
++      case 'stock':
++        aValue = Number(a.currentCost?.quantityAvailable || 0);
++        bValue = Number(b.currentCost?.quantityAvailable || 0);
++        break;
++      default:
++        aValue = String(a.sku || '').toLowerCase();
++        bValue = String(b.sku || '').toLowerCase();
++    }
++
++    if (bValue < aValue) return order === 'asc' ? 1 : -1;
++    if (bValue > aValue) return order === 'asc' ? -1 : 1;
++    return 0;
++  });
++
+   // Debounce para busca
+   useEffect(() => {
+     const timer = setTimeout(() => {
+@@ -242,8 +314,18 @@ export default function ProductsList() {
+   const openEdit = (product) => {
+     setEditSku(product.sku);
+     setEditName(product.name || '');
+-    setEditCost(''); // Custo não é mais editável diretamente, vem dos lotes
+-    setEditErrors({});
++
++    const currentCost = product.currentCost || {};
++    const unitCost = currentCost.unitCost ?? currentCost.price ?? 0;
++    const taxPerUnit = currentCost.taxPerUnit ?? currentCost.taxPaid ?? 0;
++    const costPerUnit = currentCost.costPerUnit ?? currentCost.unitCost ?? 0;
++
++    // Pega o custo manual (pode vir de product.customCost ou product.manualCost, o ideal é mapear onde está no backend)
++    // Vamos usar a variável `cost` ou deixá-la vazia para o cliente preencher.
++    setEditCost(product.cost || '');
++    setEditCalculatedCost(costPerUnit);
++    setEditNfeCost(unitCost);
++    setEditTaxPerUnit(taxPerUnit);    setEditErrors({});
+     setEditOpen(true);
+   };
+ 
+@@ -263,10 +345,24 @@ export default function ProductsList() {
+     if (!validateEdit()) return;
+     setEditSaving(true);
+     try {
+-      const payload = { name: editName.trim() };
++      // Enviamos manualCost ou cost, substituindo o que for necessário. Se for string vazia, enviamos null para manter só o calculado.
++      const payload = { 
++        name: editName.trim(),
++        cost: editCost !== '' ? Number(String(editCost).replace(',', '.')) : null
++      };
+       await axios.patch(`http://localhost:5001/api/products/${encodeURIComponent(editSku)}`, payload, { headers: { ...getAuthHeaders() } });
+       // Atualizar localmente sem refetch completo
+-      setProducts(prev => prev.map(p => p.sku === editSku ? { ...p, name: payload.name, updatedAt: new Date().toISOString() } : p));
++      setProducts(prev => prev.map(p => {
++        if (p.sku === editSku) {
++          return { 
++            ...p, 
++            name: payload.name, 
++            cost: payload.cost,
++            updatedAt: new Date().toISOString() 
++          };
++        }
++        return p;
++      }));
+       setSnack({ open: true, type: 'success', msg: 'Produto atualizado' });
+       setEditOpen(false);
+     } catch (e) {
+@@ -695,28 +791,78 @@ export default function ProductsList() {
+             <TableHead>
+               <TableRow>
+                 <TableCell width="40"></TableCell>
+-                <TableCell>SKU</TableCell>
+-                <TableCell>Nome</TableCell>
+-                <TableCell align="right">Custo Atual</TableCell>
+-                <TableCell align="right">Custo/Unidade</TableCell>
+-                <TableCell align="right">Imposto (R$)</TableCell>
++                <TableCell sortDirection={orderBy === 'sku' ? order : false}>
++                  <TableSortLabel
++                    active={orderBy === 'sku'}
++                    direction={orderBy === 'sku' ? order : 'asc'}
++                    onClick={() => handleRequestSort('sku')}
++                  >
++                    SKU
++                  </TableSortLabel>
++                </TableCell>
++                <TableCell sortDirection={orderBy === 'name' ? order : false}>
++                  <TableSortLabel
++                    active={orderBy === 'name'}
++                    direction={orderBy === 'name' ? order : 'asc'}
++                    onClick={() => handleRequestSort('name')}
++                  >
++                    Nome
++                  </TableSortLabel>
++                </TableCell>
++                <TableCell align="right" sortDirection={orderBy === 'cost' ? order : false}>
++                  <TableSortLabel
++                    active={orderBy === 'cost'}
++                    direction={orderBy === 'cost' ? order : 'asc'}
++                    onClick={() => handleRequestSort('cost')}
++                  >
++                    Custo (NFe)
++                  </TableSortLabel>
++                </TableCell>
++                <TableCell align="right">Custo Manual</TableCell>
++                <TableCell align="right">Imposto/Unid.</TableCell>
++                <TableCell align="right">Custo Final</TableCell>
+                 <TableCell align="center">Lotes</TableCell>
+-                <TableCell align="right">Estoque Total</TableCell>
+-                <TableCell>Criado em</TableCell>
++                <TableCell align="right" sortDirection={orderBy === 'stock' ? order : false}>
++                  <TableSortLabel
++                    active={orderBy === 'stock'}
++                    direction={orderBy === 'stock' ? order : 'asc'}
++                    onClick={() => handleRequestSort('stock')}
++                  >
++                    Estoque Total
++                  </TableSortLabel>
++                </TableCell>
++                <TableCell sortDirection={orderBy === 'createdAt' ? order : false}>
++                  <TableSortLabel
++                    active={orderBy === 'createdAt'}
++                    direction={orderBy === 'createdAt' ? order : 'asc'}
++                    onClick={() => handleRequestSort('createdAt')}
++                  >
++                    Criado em
++                  </TableSortLabel>
++                </TableCell>
++                <TableCell sortDirection={orderBy === 'lastPurchase' ? order : false}>
++                  <TableSortLabel
++                    active={orderBy === 'lastPurchase'}
++                    direction={orderBy === 'lastPurchase' ? order : 'asc'}
++                    onClick={() => handleRequestSort('lastPurchase')}
++                  >
++                    Última Compra
++                  </TableSortLabel>
++                </TableCell>
+                 <TableCell align="center">Ações</TableCell>
+               </TableRow>
+             </TableHead>
+             <TableBody>
+               {loading && (
+-                <TableRow><TableCell colSpan={7} align="center"><CircularProgress size={24} /></TableCell></TableRow>
++                <TableRow><TableCell colSpan={12} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+               )}
+               {error && !loading && (
+-                <TableRow><TableCell colSpan={10} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
++                <TableRow><TableCell colSpan={12} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
+               )}
+-              {!loading && !error && filtered.length === 0 && (
+-                <TableRow><TableCell colSpan={10} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
++              {!loading && !error && sortedFiltered.length === 0 && (
++                <TableRow><TableCell colSpan={12} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
+               )}
+-              {!loading && !error && filtered.map((p) => {
++              {!loading && !error && sortedFiltered.map((p) => {
+                 const isExpanded = expandedRows.has(p.sku);
+                 const isLoadingDetails = loadingDetails.has(p.sku);
+                 const fmtBRL = (v) => v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+@@ -726,19 +872,21 @@ export default function ProductsList() {
+                 const costLots = p.costLots || [];
+                 
+                 // Dados de custo (usando nomes corretos da API)
+-                const unitCost = currentCost.unitCost || 0;           // Preço de compra
+-                const taxPerUnit = currentCost.taxPerUnit || 0;        // Imposto por unidade
+-                const costPerUnit = currentCost.costPerUnit || 0;      // Custo total por unidade
++                const unitCostNfe = currentCost.unitCost ?? currentCost.price ?? 0;
++                const unitCostManual = p.cost;
++                const taxPerUnit = currentCost.taxPerUnit ?? currentCost.taxPaid ?? 0;        // Imposto por unidade
++                const costPerUnit = unitCostManual != null ? (unitCostManual + taxPerUnit) : (currentCost.costPerUnit ?? currentCost.unitCost ?? 0); // Custo total por unidade
++
+                 const totalStock = currentCost.quantityAvailable || 0; // Estoque total
+                 const lotsCount = p.totalLots || costLots.length || 0; // Total de lotes
+-                
++
+                 return (
+                   <React.Fragment key={p.sku || p.uuid}>
+                     <TableRow hover>
+                       <TableCell>
+-                        <IconButton 
+-                          size="small" 
+-                          onClick={() => toggleRow(p.sku)} 
++                        <IconButton
++                          size="small"
++                          onClick={() => toggleRow(p.sku)}
+                           disabled={lotsCount === 0 || isLoadingDetails}
+                         >
+                           {isLoadingDetails ? <CircularProgress size={16} /> : (isExpanded ? <UpOutlined /> : <DownOutlined />)}
+@@ -749,18 +897,23 @@ export default function ProductsList() {
+                         <Typography variant="body2">{p.name || '-'}</Typography>
+                       </TableCell>
+                       <TableCell align="right">
+-                        <Typography variant="body2" fontWeight="medium">
+-                          {fmtBRL(unitCost)}
++                        <Typography variant="body2" color="text.secondary">
++                          {unitCostNfe ? fmtBRL(unitCostNfe) : '-'}
+                         </Typography>
+                       </TableCell>
+                       <TableCell align="right">
+-                        <Typography variant="body2" color="primary.main" fontWeight="bold">
+-                          {fmtBRL(costPerUnit)}
++                        <Typography variant="body2" color={unitCostManual != null ? "warning.main" : "text.secondary"} fontWeight={unitCostManual != null ? "medium" : "regular"}>
++                          {unitCostManual != null ? fmtBRL(unitCostManual) : '-'}
+                         </Typography>
+                       </TableCell>
+                       <TableCell align="right">
+                         <Typography variant="body2" color="text.secondary">
+-                          {fmtBRL(taxPerUnit)}
++                          {taxPerUnit ? fmtBRL(taxPerUnit) : '-'}
++                        </Typography>
++                      </TableCell>
++                      <TableCell align="right">
++                        <Typography variant="body2" color="primary.main" fontWeight="bold">
++                          {fmtBRL(costPerUnit)}
+                         </Typography>
+                       </TableCell>
+                       <TableCell align="center">
+@@ -787,6 +940,11 @@ export default function ProductsList() {
+                           {p.createdAt ? dayjs(p.createdAt).format('DD/MM/YYYY') : '-'}
+                         </Typography>
+                       </TableCell>
++                      <TableCell>
++                        <Typography variant="caption">
++                          {p.lastPurchaseDate ? dayjs(p.lastPurchaseDate).format('DD/MM/YYYY') : '-'}
++                        </Typography>
++                      </TableCell>
+                       <TableCell align="center">
+                         <Stack direction="row" spacing={0.5} justifyContent="center">
+                           <IconButton size="small" onClick={() => openEdit(p)} aria-label="Editar">
+@@ -804,7 +962,7 @@ export default function ProductsList() {
+                     {/* Linha expandida com detalhes dos lotes */}
+                     {costLots.length > 0 && (
+                       <TableRow>
+-                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
++                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={12}>
+                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                             <Box sx={{ margin: 2 }}>
+                               <Typography variant="h6" gutterBottom component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+@@ -904,10 +1062,30 @@ export default function ProductsList() {
+             error={Boolean(editErrors.name)}
+             helperText={editErrors.name}
+           />
++          <TextField
++            label="Custo Manual (R$)"
++            value={editCost}
++            onChange={(e)=> setEditCost(e.target.value.replace(/[^0-9.,]/g, ''))}
++            fullWidth
++            margin="normal"
++            placeholder="Deixe em branco para usar apenas os lotes"
++            helperText="Se preenchido, será somado aos impostos ou usado prioritariamente."
++          />
+           <Box sx={{ mt: 2, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
+-            <Typography variant="caption" color="text.secondary">
+-              <strong>Nota:</strong> O custo do produto é calculado automaticamente com base nos lotes de compra. 
+-              Para atualizar custos, importe novas NF-e através do botão "Importar NF-e (XML)".
++            <Typography variant="body2" color="text.primary" gutterBottom>
++              <strong>Resumo de Custos Atuais NFe/Lotes:</strong>
++            </Typography>
++            <Typography variant="caption" color="text.secondary" display="block">
++              • Custo de Compra (S/ Imposto): {Number(editNfeCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
++            </Typography>
++            <Typography variant="caption" color="text.secondary" display="block">
++              • Impostos Atuais: + {Number(editTaxPerUnit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
++            </Typography>
++            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 'bold' }}>
++              • Custo Final pelo Lote: = {Number(editCalculatedCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
++            </Typography>
++            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
++              <strong>Nota:</strong> Se o custo manual for preenchido, ele assumirá o controle, será somado aos impostos, e passará a ser o Custo Final na tabela.
+             </Typography>
+           </Box>
+         </DialogContent>
+@@ -1071,591 +1249,4 @@ export default function ProductsList() {
+                   </Stack>
+                   <LinearProgress 
+                     variant="determinate" 
+-                    value={importStatus.progress || 0} 
+-                    sx={{ 
+-                      height: 12, 
+-                      borderRadius: 2,
+-                      bgcolor: 'grey.200',
+-                      '& .MuiLinearProgress-bar': {
+-                        borderRadius: 2,
+-                        bgcolor: importStatus.status === 'completed' ? 'success.main' :
+-                                importStatus.status === 'completed_with_errors' ? 'warning.main' :
+-                                importStatus.status === 'error' ? 'error.main' :
+-                                'primary.main'
+-                      }
+-                    }} 
+-                  />
+-                </Box>
+-
+-                {/* Tempo Decorrido */}
+-                {importStatus.elapsedTime !== undefined && (
+-                  <Stack direction="row" alignItems="center" spacing={1} justifyContent="center">
+-                    <Typography variant="caption" color="text.secondary">
+-                      ⏱️ Tempo decorrido:
+-                    </Typography>
+-                    <Chip 
+-                      label={
+-                        importStatus.elapsedTime < 60 
+-                          ? `${importStatus.elapsedTime}s` 
+-                          : `${Math.floor(importStatus.elapsedTime / 60)}m ${importStatus.elapsedTime % 60}s`
+-                      }
+-                      size="small"
+-                      variant="outlined"
+-                    />
+-                  </Stack>
+-                )}
+-
+-                {/* Mensagem de Conclusão */}
+-                {importStatus.status !== 'processing' && (
+-                  <Box 
+-                    mt={2} 
+-                    p={1.5} 
+-                    bgcolor={
+-                      importStatus.status === 'completed' ? 'success.lighter' :
+-                      importStatus.status === 'completed_with_errors' ? 'warning.lighter' :
+-                      'error.lighter'
+-                    }
+-                    borderRadius={1}
+-                  >
+-                    <Typography 
+-                      variant="body2" 
+-                      fontWeight="medium"
+-                      color={
+-                        importStatus.status === 'completed' ? 'success.dark' :
+-                        importStatus.status === 'completed_with_errors' ? 'warning.dark' :
+-                        'error.dark'
+-                      }
+-                    >
+-                      {importStatus.status === 'completed' && 
+-                        `🎉 Importação concluída com sucesso! ${importStatus.successful} de ${importStatus.totalFiles} NFes importadas.`
+-                      }
+-                      {importStatus.status === 'completed_with_errors' && 
+-                        `⚠️ Importação concluída com erros: ${importStatus.successful} sucesso, ${importStatus.failed} falhas.`
+-                      }
+-                      {importStatus.status === 'error' && 
+-                        `❌ Erro no processamento do batch. Verifique os arquivos abaixo.`
+-                      }
+-                    </Typography>
+-                  </Box>
+-                )}
+-              </Paper>
+-            )}
+-
+-            {/* Barra de progresso geral */}
+-            {importing && importStatus && (
+-              <Box>
+-                <Stack direction="row" justifyContent="space-between" mb={0.5}>
+-                  <Stack direction="row" spacing={1} alignItems="center">
+-                    <CircularProgress size={16} />
+-                    <Typography variant="caption" color="text.secondary" fontWeight="medium">
+-                      Processando arquivos...
+-                    </Typography>
+-                  </Stack>
+-                  <Typography variant="caption" color="text.secondary" fontWeight="bold">
+-                    {importStatus.progress}%
+-                  </Typography>
+-                </Stack>
+-                <LinearProgress 
+-                  variant="determinate" 
+-                  value={importStatus.progress || 0} 
+-                  sx={{ height: 8, borderRadius: 1 }} 
+-                />
+-              </Box>
+-            )}
+-
+-            {/* Lista de arquivos */}
+-            {importFiles && Array.isArray(importFiles) && importFiles.length > 0 && (
+-              <Paper variant="outlined" sx={{ maxHeight: 400, overflow: 'auto' }}>
+-                <List dense>
+-                  {importFiles.map((f, i) => {
+-                    // Verificações de segurança
+-                    if (!f || !f.file) return null;
+-                    
+-                    const getStatusColor = (status) => {
+-                      switch(status) {
+-                        case 'success': return 'success.main';
+-                        case 'failed': return 'error.main';
+-                        case 'processing': return 'info.main';
+-                        case 'skipped': return 'warning.main';
+-                        case 'pending': return 'grey.400';
+-                        default: return 'text.secondary';
+-                      }
+-                    };
+-
+-                    const getStatusIcon = (status) => {
+-                      switch(status) {
+-                        case 'success': return '✅';
+-                        case 'failed': return '❌';
+-                        case 'processing': return '🔄';
+-                        case 'skipped': return '⏭️';
+-                        case 'pending': return '⏳';
+-                        default: return '📄';
+-                      }
+-                    };
+-
+-                    const getStatusLabel = (status) => {
+-                      switch(status) {
+-                        case 'success': return 'Importado';
+-                        case 'failed': return 'Erro';
+-                        case 'processing': return 'Processando...';
+-                        case 'skipped': return 'Já importado';
+-                        case 'pending': return 'Aguardando';
+-                        default: return 'Pronto';
+-                      }
+-                    };
+-
+-                    const getErrorTypeLabel = (errorType) => {
+-                      switch(errorType) {
+-                        case 'PARSE_ERROR': return '⚠️ XML Inválido';
+-                        case 'DUPLICATE': return '⏭️ Duplicado';
+-                        case 'VALIDATION_ERROR': return '❌ Validação Falhou';
+-                        case 'DATABASE_ERROR': return '� Erro no Banco';
+-                        case 'UNKNOWN_ERROR': return '⚠️ Erro Desconhecido';
+-                        default: return '❌ Erro';
+-                      }
+-                    };
+-
+-                    return (
+-                      <React.Fragment key={`file-${i}-${f.filename || 'unknown'}`}>
+-                        <ListItem alignItems="flex-start">
+-                          <ListItemText
+-                            primary={
+-                              <Stack direction="row" spacing={1} alignItems="center">
+-                                <Typography variant="body2" component="span">
+-                                  {getStatusIcon(f.status)}
+-                                </Typography>
+-                                <Typography variant="body2" fontWeight="medium" sx={{ flex: 1 }}>
+-                                  {f.filename || f.file.name || 'Arquivo sem nome'}
+-                                </Typography>
+-                                <Chip 
+-                                  label={getStatusLabel(f.status)}
+-                                  size="small"
+-                                  sx={{ 
+-                                    height: 20,
+-                                    fontSize: '0.7rem',
+-                                    bgcolor: getStatusColor(f.status),
+-                                    color: 'white'
+-                                  }}
+-                                />
+-                                {!importing && (f.status === 'ready' || f.status === 'failed') && (
+-                                  <IconButton 
+-                                    size="small" 
+-                                    color="error"
+-                                    onClick={() => {
+-                                      setImportFiles(prev => prev.filter((_, idx) => idx !== i));
+-                                    }}
+-                                    sx={{ ml: 1 }}
+-                                  >
+-                                    <DeleteOutlined style={{ fontSize: 16 }} />
+-                                  </IconButton>
+-                                )}
+-                              </Stack>
+-                            }
+-                            secondaryTypographyProps={{ component: 'div' }}
+-                            secondary={
+-                              <Box mt={0.5}>
+-                                {/* Barra de progresso individual */}
+-                                {f.status === 'processing' && (
+-                                  <LinearProgress 
+-                                    variant="determinate" 
+-                                    value={f.progress || 50} 
+-                                    sx={{ height: 4, borderRadius: 1, mb: 0.5 }} 
+-                                  />
+-                                )}
+-
+-                                {/* Informações da NFe */}
+-                                {f.nfeData && f.status === 'success' && (
+-                                  <Box sx={{ p: 1.5, bgcolor: 'success.lighter', borderRadius: 1, mt: 0.5 }}>
+-                                    <Stack spacing={1}>
+-                                      {/* Header da NFe */}
+-                                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+-                                        <Stack direction="row" spacing={1} alignItems="center">
+-                                          <Chip 
+-                                            label={`NFe ${f.nfeData.nfeNumber || '-'}`}
+-                                            size="small"
+-                                            color="success"
+-                                            variant="outlined"
+-                                          />
+-                                          {f.nfeData.nfeKey && (
+-                                            <Tooltip title={`Chave: ${f.nfeData.nfeKey}`}>
+-                                              <Chip 
+-                                                label={`${f.nfeData.nfeKey.substring(0, 8)}...`}
+-                                                size="small"
+-                                                variant="outlined"
+-                                              />
+-                                            </Tooltip>
+-                                          )}
+-                                        </Stack>
+-                                        {f.nfeData.issueDate && (
+-                                          <Typography variant="caption" color="text.secondary">
+-                                            {dayjs(f.nfeData.issueDate).format('DD/MM/YYYY')}
+-                                          </Typography>
+-                                        )}
+-                                      </Stack>
+-
+-                                      {/* Detalhes do Fornecedor */}
+-                                      {(f.nfeData.supplier || f.nfeData.supplierCNPJ) && (
+-                                        <Box>
+-                                          <Typography variant="caption" color="text.secondary">Fornecedor:</Typography>
+-                                          <Typography variant="caption" fontWeight="bold" display="block">
+-                                            {f.nfeData.supplier || '-'}
+-                                            {f.nfeData.supplierCNPJ && ` (CNPJ: ${f.nfeData.supplierCNPJ})`}
+-                                          </Typography>
+-                                        </Box>
+-                                      )}
+-
+-                                      {/* Grid de Informações */}
+-                                      <Grid container spacing={1}>
+-                                        {f.nfeData.totalValue !== undefined && (
+-                                          <Grid item xs={6}>
+-                                            <Typography variant="caption" color="text.secondary">Valor Total:</Typography>
+-                                            <Typography variant="caption" fontWeight="bold" display="block">
+-                                              R$ {Number(f.nfeData.totalValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+-                                            </Typography>
+-                                          </Grid>
+-                                        )}
+-                                        {f.nfeData.itemsCount !== undefined && (
+-                                          <Grid item xs={6}>
+-                                            <Typography variant="caption" color="text.secondary">Itens:</Typography>
+-                                            <Typography variant="caption" fontWeight="bold" display="block">
+-                                              {f.nfeData.itemsCount} produtos
+-                                            </Typography>
+-                                          </Grid>
+-                                        )}
+-                                      </Grid>
+-
+-                                      {/* Resumo do Processamento */}
+-                                      <Box sx={{ pt: 0.5, borderTop: '1px solid', borderColor: 'success.light' }}>
+-                                        <Typography variant="caption" color="success.dark" fontWeight="medium">
+-                                          ✓ {f.nfeData.productsCreated || 0} novos | 
+-                                          ↻ {f.nfeData.productsUpdated || 0} atualizados | 
+-                                          📦 {f.nfeData.lotsCreated || 0} lotes criados
+-                                        </Typography>
+-                                        {f.nfeData.totalLotValue && (
+-                                          <Typography variant="caption" color="text.secondary" display="block">
+-                                            Valor em estoque: R$ {Number(f.nfeData.totalLotValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+-                                          </Typography>
+-                                        )}
+-                                      </Box>
+-                                    </Stack>
+-                                  </Box>
+-                                )}
+-
+-                                {/* NFe Pulada (Duplicada) */}
+-                                {f.nfeData && f.status === 'skipped' && (
+-                                  <Box sx={{ p: 1.5, bgcolor: 'warning.lighter', borderRadius: 1, mt: 0.5 }}>
+-                                    <Stack spacing={0.5}>
+-                                      <Stack direction="row" spacing={1} alignItems="center">
+-                                        <Typography variant="caption" fontWeight="bold" color="warning.dark">
+-                                          ⏭️ NFe já importada anteriormente
+-                                        </Typography>
+-                                      </Stack>
+-                                      {f.nfeData.nfeKey && (
+-                                        <Typography variant="caption" color="text.secondary">
+-                                          Chave: {f.nfeData.nfeKey}
+-                                        </Typography>
+-                                      )}
+-                                      {f.nfeData.nfeNumber && (
+-                                        <Typography variant="caption" color="text.secondary">
+-                                          Número: {f.nfeData.nfeNumber}
+-                                        </Typography>
+-                                      )}
+-                                    </Stack>
+-                                  </Box>
+-                                )}
+-
+-                                {/* Mensagem de erro */}
+-                                {f.error && f.status === 'failed' && (
+-                                  <Box sx={{ p: 1.5, bgcolor: 'error.lighter', borderRadius: 1, mt: 0.5 }}>
+-                                    <Stack spacing={0.5}>
+-                                      {f.errorType && (
+-                                        <Chip 
+-                                          label={getErrorTypeLabel(f.errorType)}
+-                                          size="small"
+-                                          color="error"
+-                                          sx={{ width: 'fit-content' }}
+-                                        />
+-                                      )}
+-                                      <Typography variant="caption" color="error.dark">
+-                                        {f.error}
+-                                      </Typography>
+-                                    </Stack>
+-                                  </Box>
+-                                )}
+-
+-                                {/* Status de espera */}
+-                                {f.status === 'ready' && (
+-                                  <Typography variant="caption" color="text.secondary" display="block">
+-                                    Pronto para enviar
+-                                  </Typography>
+-                                )}
+-                              </Box>
+-                            }
+-                          />
+-                        </ListItem>
+-                        {i < importFiles.length - 1 && <Divider />}
+-                      </React.Fragment>
+-                    );
+-                  }).filter(Boolean)}
+-                </List>
+-              </Paper>
+-            )}
+-
+-            {/* Avisos e dicas */}
+-            {!importing && importFiles.length === 0 && !importStatus && (
+-              <Box sx={{ p: 3, bgcolor: 'info.lighter', borderRadius: 1, textAlign: 'center' }}>
+-                <Typography variant="h6" color="info.dark" gutterBottom>
+-                  📋 Como Importar NFes
+-                </Typography>
+-                <Typography variant="body2" color="text.secondary" paragraph>
+-                  <strong>💡 Dicas Importantes:</strong>
+-                </Typography>
+-                <Stack spacing={0.5} alignItems="flex-start" sx={{ maxWidth: 500, mx: 'auto' }}>
+-                  <Typography variant="caption" color="text.secondary">
+-                    • Você pode selecionar até <strong>50 arquivos XML</strong> por vez
+-                  </Typography>
+-                  <Typography variant="caption" color="text.secondary">
+-                    • Tamanho máximo de <strong>10MB</strong> por arquivo
+-                  </Typography>
+-                  <Typography variant="caption" color="text.secondary">
+-                    • NFes duplicadas serão <strong>automaticamente ignoradas</strong>
+-                  </Typography>
+-                  <Typography variant="caption" color="text.secondary">
+-                    • Produtos e lotes de custo serão <strong>criados/atualizados automaticamente</strong>
+-                  </Typography>
+-                  <Typography variant="caption" color="text.secondary">
+-                    • O processamento é <strong>assíncrono</strong> - você pode fechar esta janela
+-                  </Typography>
+-                </Stack>
+-              </Box>
+-            )}
+-          </Stack>
+-        </DialogContent>
+-        <DialogActions>
+-          <Button 
+-            key="cancel-btn"
+-            onClick={(e) => {
+-              e.preventDefault();
+-              e.stopPropagation();
+-              if (!importing && !uploadingRef.current) {
+-                requestAnimationFrame(() => {
+-                  handleCloseImportDialog();
+-                });
+-              }
+-            }} 
+-            disabled={importing || uploadingRef.current}
+-          >
+-            {importing ? 'Fechar' : 'Cancelar'}
+-          </Button>
+-          {importing ? (
+-            <Button 
+-              key="stop-btn"
+-              color="warning" 
+-              variant="outlined"
+-              onClick={(e) => {
+-                e.preventDefault();
+-                e.stopPropagation();
+-                requestAnimationFrame(() => {
+-                  handleCancelImport();
+-                });
+-              }}
+-            >
+-              Parar Processamento
+-            </Button>
+-          ) : (
+-            <Button 
+-              key="upload-btn"
+-              variant="contained" 
+-              startIcon={<UploadOutlined />}
+-              disabled={importFiles.length === 0 || importing || uploadingRef.current} 
+-              onClick={(e) => {
+-                e.preventDefault();
+-                e.stopPropagation();
+-                if (!uploadingRef.current && !importing) {
+-                  handleUploadNFes();
+-                }
+-              }}
+-            >
+-              Enviar {importFiles.length > 0 ? `(${importFiles.length})` : ''}
+-            </Button>
+-          )}
+-        </DialogActions>
+-      </Dialog>
+-        </DialogErrorBoundary>
+-      )}
+-
+-      {/* Modal de Detalhes Completos dos Lotes */}
+-      <Dialog
+-        open={lotsDetailsOpen}
+-        onClose={() => setLotsDetailsOpen(false)}
+-        maxWidth="lg"
+-        fullWidth
+-      >
+-        <DialogTitle>
+-          <Stack direction="row" alignItems="center" spacing={1}>
+-            <DatabaseOutlined style={{ fontSize: 24 }} />
+-            <Typography variant="h5">Histórico Completo de Lotes de Custo</Typography>
+-          </Stack>
+-          {selectedProduct && (
+-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+-              SKU: <strong>{selectedProduct.sku}</strong> - {selectedProduct.name}
+-            </Typography>
+-          )}
+-        </DialogTitle>
+-        <DialogContent dividers>
+-          {selectedProduct && selectedProduct.costLots && selectedProduct.costLots.length > 0 ? (() => {
+-            const fmtBRL = (v) => v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+-            return (
+-            <Stack spacing={3}>
+-              {/* Resumo Geral */}
+-              <Box sx={{ p: 2, bgcolor: 'primary.lighter', borderRadius: 1 }}>
+-                <Grid container spacing={2}>
+-                  <Grid item xs={12} sm={3}>
+-                    <Typography variant="caption" color="text.secondary">Custo Atual</Typography>
+-                    <Typography variant="h6">{((v) => v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-')(selectedProduct.currentCost?.costPerUnit || 0)}/un</Typography>
+-                  </Grid>
+-                  <Grid item xs={12} sm={3}>
+-                    <Typography variant="caption" color="text.secondary">Total de Lotes</Typography>
+-                    <Typography variant="h6">{selectedProduct.costLots.length}</Typography>
+-                  </Grid>
+-                  <Grid item xs={12} sm={3}>
+-                    <Typography variant="caption" color="text.secondary">Estoque Total</Typography>
+-                    <Typography variant="h6">
+-                      {selectedProduct.costLots.reduce((sum, lot) => sum + (lot.quantityAvailable || 0), 0)} un
+-                    </Typography>
+-                  </Grid>
+-                  <Grid item xs={12} sm={3}>
+-                    <Typography variant="caption" color="text.secondary">Valor em Estoque</Typography>
+-                    <Typography variant="h6">
+-                      {fmtBRL(selectedProduct.costLots.reduce((sum, lot) => 
+-                        sum + ((lot.quantityAvailable || 0) * (lot.costPerUnit || 0)), 0
+-                      ))}
+-                    </Typography>
+-                  </Grid>
+-                </Grid>
+-              </Box>
+-
+-              {/* Tabela Detalhada */}
+-              <TableContainer>
+-                <Table size="small">
+-                  <TableHead sx={{ bgcolor: 'grey.100' }}>
+-                    <TableRow>
+-                      <TableCell><strong>Data da Compra</strong></TableCell>
+-                      <TableCell align="right"><strong>Qtd Comprada</strong></TableCell>
+-                      <TableCell align="right"><strong>Qtd Disponível</strong></TableCell>
+-                      <TableCell align="right"><strong>% Utilizado</strong></TableCell>
+-                      <TableCell align="right"><strong>Custo Unitário</strong></TableCell>
+-                      <TableCell align="right"><strong>Custo Imposto</strong></TableCell>
+-                      <TableCell align="right"><strong>Custo Frete</strong></TableCell>
+-                      <TableCell align="right"><strong>Outros Custos</strong></TableCell>
+-                      <TableCell align="right"><strong>Custo Total</strong></TableCell>
+-                      <TableCell align="right"><strong>Custo/Unidade</strong></TableCell>
+-                      <TableCell><strong>NF-e</strong></TableCell>
+-                    </TableRow>
+-                  </TableHead>
+-                  <TableBody>
+-                    {selectedProduct.costLots
+-                      .sort((a, b) => new Date(b.purchaseDate) - new Date(a.purchaseDate))
+-                      .map((lot, idx) => {
+-                        const percentUsed = lot.quantityPurchased > 0
+-                          ? ((lot.quantityPurchased - lot.quantityAvailable) / lot.quantityPurchased * 100).toFixed(1)
+-                          : 0;
+-                        const isFullyUsed = lot.quantityAvailable === 0;
+-                        
+-                        return (
+-                          <TableRow 
+-                            key={idx}
+-                            sx={{ 
+-                              bgcolor: isFullyUsed ? 'grey.50' : 'inherit',
+-                              opacity: isFullyUsed ? 0.6 : 1
+-                            }}
+-                          >
+-                            <TableCell>
+-                              {dayjs(lot.purchaseDate).format('DD/MM/YYYY')}
+-                              {isFullyUsed && (
+-                                <Chip 
+-                                  label="ESGOTADO" 
+-                                  size="small" 
+-                                  color="default" 
+-                                  sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+-                                />
+-                              )}
+-                            </TableCell>
+-                            <TableCell align="right">{lot.quantityPurchased || 0}</TableCell>
+-                            <TableCell align="right">
+-                              <Chip 
+-                                label={lot.quantityAvailable || 0}
+-                                size="small"
+-                                color={lot.quantityAvailable > 0 ? 'success' : 'default'}
+-                              />
+-                            </TableCell>
+-                            <TableCell align="right">
+-                              <Stack direction="row" alignItems="center" spacing={1} justifyContent="flex-end">
+-                                <Box sx={{ width: 60 }}>
+-                                  <LinearProgress 
+-                                    variant="determinate" 
+-                                    value={Math.min(percentUsed, 100)}
+-                                    color={percentUsed >= 90 ? 'error' : percentUsed >= 50 ? 'warning' : 'primary'}
+-                                  />
+-                                </Box>
+-                                <Typography variant="caption">{percentUsed}%</Typography>
+-                              </Stack>
+-                            </TableCell>
+-                            <TableCell align="right">{fmtBRL(lot.unitCost || 0)}</TableCell>
+-                            <TableCell align="right">{fmtBRL(lot.taxCost || 0)}</TableCell>
+-                            <TableCell align="right">{fmtBRL(lot.shippingCost || 0)}</TableCell>
+-                            <TableCell align="right">{fmtBRL(lot.otherCosts || 0)}</TableCell>
+-                            <TableCell align="right"><strong>{fmtBRL(lot.totalCost || 0)}</strong></TableCell>
+-                            <TableCell align="right">
+-                              <Chip 
+-                                label={fmtBRL(lot.costPerUnit || 0)}
+-                                size="small"
+-                                color="primary"
+-                              />
+-                            </TableCell>
+-                            <TableCell>
+-                              {lot.supplierNfeId ? (
+-                                <Tooltip title={`NF-e: ${lot.supplierNfeId}`}>
+-                                  <Chip 
+-                                    icon={<InfoCircleOutlined />}
+-                                    label={lot.supplierNfeId.substring(0, 8) + '...'}
+-                                    size="small"
+-                                    variant="outlined"
+-                                    color="info"
+-                                  />
+-                                </Tooltip>
+-                              ) : '-'}
+-                            </TableCell>
+-                          </TableRow>
+-                        );
+-                      })}
+-                  </TableBody>
+-                </Table>
+-              </TableContainer>
+-
+-              {/* Legenda */}
+-              <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+-                <Typography variant="caption" color="text.secondary">
+-                  <strong>Dica:</strong> Os lotes estão ordenados por data de compra (mais recente primeiro). 
+-                  Lotes esgotados aparecem com fundo cinza. O percentual de utilização indica quanto do lote já foi consumido.
+-                </Typography>
+-              </Box>
+-            </Stack>
+-            );
+-          })() : (
+-            <Box sx={{ p: 4, textAlign: 'center' }}>
+-              <Typography color="text.secondary">Nenhum lote de custo disponível</Typography>
+-            </Box>
+-          )}
+-        </DialogContent>
+-        <DialogActions>
+-          <Button onClick={() => setLotsDetailsOpen(false)}>Fechar</Button>
+-        </DialogActions>
+-      </Dialog>
+-
+-      <Snackbar open={snack.open} autoHideDuration={3000} onClose={() => setSnack(s => ({ ...s, open:false }))} anchorOrigin={{ vertical:'bottom', horizontal:'center' }}>
+-        <Alert severity={snack.type} variant="filled" onClose={() => setSnack(s => ({ ...s, open:false }))}>{snack.msg}</Alert>
+-      </Snackbar>
+-    </MainCard>
+-  );
+-}
++       
+\ No newline at end of file

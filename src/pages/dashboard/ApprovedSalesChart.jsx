@@ -20,9 +20,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import MainCard from 'components/MainCard';
 import IncomeAreaChart from './IncomeAreaChart';
 
-// ==============================|| VENDAS APROVADAS ||============================== //
+// ==============================|| GRÁFICO DE VENDAS APROVADAS ||============================== //
 
-export default function UniqueVisitorCard() {
+export default function ApprovedSalesChart() {
   // Desvinculado do filtro principal - cria seu próprio período
   const [period, setPeriod] = useState('year');
   const [includeFrete, setIncludeFrete] = useState(false);
@@ -146,13 +146,15 @@ export default function UniqueVisitorCard() {
           dateRange,
           groupBy,
           includeFrete,
-          url: 'http://localhost:5001/api/orders/sales-summary',
+          url: 'http://localhost:5001/api/orders/sales-by-period',
           params
         });
         
-        const response = await axios.get('http://localhost:5001/api/orders/sales-summary', { params });
+        const response = await axios.get('http://localhost:5001/api/orders/sales-by-period', { params });
         
         console.log('📦 [ApprovedSalesChart] Resposta da API:', response.data);
+        console.log('📦 [ApprovedSalesChart] salesByPeriod array:', response.data.salesByPeriod);
+        console.log('📦 [ApprovedSalesChart] Primeiro item:', response.data.salesByPeriod?.[0]);
         
         const salesData = {
           totalSales: response.data.totalSales || 0,
@@ -161,6 +163,7 @@ export default function UniqueVisitorCard() {
         };
         
         console.log('✅ [ApprovedSalesChart] Dados processados:', salesData);
+        console.log('✅ [ApprovedSalesChart] Número de períodos:', salesData.salesByPeriod.length);
         
         setSalesData(salesData);
       } catch (error) {

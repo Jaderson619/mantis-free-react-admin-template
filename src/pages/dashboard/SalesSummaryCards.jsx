@@ -16,20 +16,43 @@ function SalesSummaryCards({ startDate, endDate, applyFilter }) {
   const start = dayjs(startDate).startOf('day').format('YYYY-MM-DD HH:mm:ss');
   const end = dayjs(endDate).endOf('day').format('YYYY-MM-DD HH:mm:ss');
   const url = `http://localhost:5001/api/reports/salesSummary/?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}&status=paid`;
+  
+  console.log('🔍 [SalesSummaryCards] Buscando dados:', {
+    startDate: start,
+    endDate: end,
+    url
+  });
+  
   const response = await axios.get(url);
+  console.log('📦 [SalesSummaryCards] Resposta da API:', response.data);
+  
         const data = response.data.resumoVendas;
-        setResumoVendas({
-          receitaTotalVendasAprovadas: parseFloat(data.receitaTotalVendasAprovadas),
-          totalCustoImposto: parseFloat(data.totalCustoImposto),
-          totalTarifasVenda: parseFloat(data.totalTarifasVenda),
+        
+        if (!data) {
+          console.warn('⚠️ [SalesSummaryCards] Nenhum dado retornado em response.data.resumoVendas');
+          console.log('📋 [SalesSummaryCards] Estrutura completa da resposta:', JSON.stringify(response.data, null, 2));
+          return;
+        }
+        const resumo = {
+          receitaTotalVendasAprovadas: parseFloat(data.receitaTotalVendasAprovadas) || 0,
+          totalCustoImposto: parseFloat(data.totalCustoImposto) || 0,
+          totalTarifasVenda: parseFloat(data.totalTarifasVenda) || 0,
           totalFrete: parseFloat(data.totalFrete || 0),
-          totalMargemContribuicao: parseFloat(data.totalMargemContribuicao),
-          quantidadeVendasAprovadas: parseInt(data.quantidadeVendasAprovadas, 10),
-          ticketMedio: parseFloat(data.ticketMedio),
-          ticketMedioMargem: parseFloat(data.ticketMedioMargem)
-        });
+          totalMargemContribuicao: parseFloat(data.totalMargemContribuicao) || 0,
+          quantidadeVendasAprovadas: parseInt(data.quantidadeVendasAprovadas, 10) || 0,
+          ticketMedio: parseFloat(data.ticketMedio) || 0,
+          ticketMedioMargem: parseFloat(data.ticketMedioMargem) || 0
+        };
+        
+        console.log('✅ [SalesSummaryCards] Dados processados:', resumo);
+        setResumoVendas(resumo);
       } catch (error) {
-        console.error('Erro ao buscar o resumo de vendas:', error);
+        console.error('❌ [SalesSummaryCards] Erro ao buscar o resumo de vendas:', error);
+        console.error('📋 [SalesSummaryCards] Detalhes do erro:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
       }
     }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText, Collapse, Tooltip, Divider } from '@mui/material';
+import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText, Collapse, Tooltip, Divider } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import MainCard from 'components/MainCard';
 import DialogErrorBoundary from 'components/DialogErrorBoundary';
@@ -23,11 +23,6 @@ export default function ProductsList() {
   const [search, setSearch] = useState('');
   const [filterCost, setFilterCost] = useState('all');
   const [filterTax, setFilterTax] = useState('all');
-  
-  // --- NOVOS STATES PARA ORDENAÇÃO ---
-  const [order, setOrder] = useState('desc');
-  const [orderBy, setOrderBy] = useState('createdAt');
-
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [total, setTotal] = useState(0);
@@ -36,9 +31,6 @@ export default function ProductsList() {
   const [editSku, setEditSku] = useState('');
   const [editName, setEditName] = useState('');
   const [editCost, setEditCost] = useState('');
-  const [editCalculatedCost, setEditCalculatedCost] = useState('');
-  const [editNfeCost, setEditNfeCost] = useState('');
-  const [editTaxPerUnit, setEditTaxPerUnit] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [snack, setSnack] = useState({ open: false, type: 'success', msg: '' });
   const [editErrors, setEditErrors] = useState({});
@@ -88,23 +80,13 @@ export default function ProductsList() {
       
       const productDetails = response.data?.data || response.data;
       
-        if (productDetails) {
-          // Atualizar o produto na lista com os detalhes completos (incluindo costLots)
-          if (isMountedRef.current) {
-            setProducts(prev => prev.map(p => {
-              if (p.sku === sku) {
-                return {
-                  ...p,
-                  ...productDetails,
-                  currentCost: {
-                    ...(p.currentCost || {}),
-                    ...(productDetails.currentCost || {})
-                  }
-                };
-              }
-              return p;
-            }));
-          }        // Retornar os detalhes para uso imediato
+      if (productDetails) {
+        // Atualizar o produto na lista com os detalhes completos (incluindo costLots)
+        if (isMountedRef.current) {
+          setProducts(prev => prev.map(p => p.sku === sku ? { ...p, ...productDetails } : p));
+        }
+        
+        // Retornar os detalhes para uso imediato
         return productDetails;
       }
       return null;
@@ -167,16 +149,7 @@ export default function ProductsList() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  const handleRequestSort = (property) => {
-    const isAsc = orderBy === property && order === 'asc';
-    const newOrder = isAsc ? 'desc' : 'asc';
-    setOrder(newOrder);
-    setOrderBy(property);
-    setPage(1); // Voltar à primeira página ao reordenar
-    fetchProducts(1, limit, search, property, newOrder);
-  };
-
-  const fetchProducts = async (targetPage = page, targetLimit = limit, searchTerm = search, sortField = orderBy, sortDir = order) => {
+  const fetchProducts = async (targetPage = page, targetLimit = limit, searchTerm = search) => {
     setLoading(true);
     setError(null);
     try {
@@ -188,12 +161,6 @@ export default function ProductsList() {
       // Adicionar busca se houver termo
       if (searchTerm && searchTerm.trim()) {
         params.search = searchTerm.trim();
-      }
-
-      // Adicionar ordenação para a API se suportado
-      if (sortField) {
-        params.sortBy = sortField;
-        params.sortOrder = sortDir;
       }
       
       // Tenta primeiro a nova rota, se falhar usa a antiga
@@ -261,45 +228,6 @@ export default function ProductsList() {
     return costCond && taxCond;
   });
 
-  // Ordenação
-  const sortedFiltered = [...filtered].sort((a, b) => {
-    let aValue, bValue;
-    
-    switch(orderBy) {
-      case 'sku':
-        aValue = String(a.sku || '').toLowerCase();
-        bValue = String(b.sku || '').toLowerCase();
-        break;
-      case 'name':
-        aValue = String(a.name || '').toLowerCase();
-        bValue = String(b.name || '').toLowerCase();
-        break;
-      case 'createdAt':
-        aValue = new Date(a.createdAt || 0).getTime();
-        bValue = new Date(b.createdAt || 0).getTime();
-        break;
-      case 'lastPurchase':
-        aValue = new Date(a.lastPurchaseDate || 0).getTime();
-        bValue = new Date(b.lastPurchaseDate || 0).getTime();
-        break;
-      case 'cost':
-        aValue = Number(a.currentCost?.costPerUnit || a.cost || 0);
-        bValue = Number(b.currentCost?.costPerUnit || b.cost || 0);
-        break;
-      case 'stock':
-        aValue = Number(a.currentCost?.quantityAvailable || 0);
-        bValue = Number(b.currentCost?.quantityAvailable || 0);
-        break;
-      default:
-        aValue = String(a.sku || '').toLowerCase();
-        bValue = String(b.sku || '').toLowerCase();
-    }
-
-    if (bValue < aValue) return order === 'asc' ? 1 : -1;
-    if (bValue > aValue) return order === 'asc' ? -1 : 1;
-    return 0;
-  });
-
   // Debounce para busca
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -314,18 +242,8 @@ export default function ProductsList() {
   const openEdit = (product) => {
     setEditSku(product.sku);
     setEditName(product.name || '');
-
-    const currentCost = product.currentCost || {};
-    const unitCost = currentCost.unitCost ?? currentCost.price ?? 0;
-    const taxPerUnit = currentCost.taxPerUnit ?? currentCost.taxPaid ?? 0;
-    const costPerUnit = currentCost.costPerUnit ?? currentCost.unitCost ?? 0;
-
-    // Pega o custo manual (pode vir de product.customCost ou product.manualCost, o ideal é mapear onde está no backend)
-    // Vamos usar a variável `cost` ou deixá-la vazia para o cliente preencher.
-    setEditCost(product.cost || '');
-    setEditCalculatedCost(costPerUnit);
-    setEditNfeCost(unitCost);
-    setEditTaxPerUnit(taxPerUnit);    setEditErrors({});
+    setEditCost(''); // Custo não é mais editável diretamente, vem dos lotes
+    setEditErrors({});
     setEditOpen(true);
   };
 
@@ -345,24 +263,10 @@ export default function ProductsList() {
     if (!validateEdit()) return;
     setEditSaving(true);
     try {
-      // Enviamos manualCost ou cost, substituindo o que for necessário. Se for string vazia, enviamos null para manter só o calculado.
-      const payload = { 
-        name: editName.trim(),
-        cost: editCost !== '' ? Number(String(editCost).replace(',', '.')) : null
-      };
+      const payload = { name: editName.trim() };
       await axios.patch(`http://localhost:5001/api/products/${encodeURIComponent(editSku)}`, payload, { headers: { ...getAuthHeaders() } });
       // Atualizar localmente sem refetch completo
-      setProducts(prev => prev.map(p => {
-        if (p.sku === editSku) {
-          return { 
-            ...p, 
-            name: payload.name, 
-            cost: payload.cost,
-            updatedAt: new Date().toISOString() 
-          };
-        }
-        return p;
-      }));
+      setProducts(prev => prev.map(p => p.sku === editSku ? { ...p, name: payload.name, updatedAt: new Date().toISOString() } : p));
       setSnack({ open: true, type: 'success', msg: 'Produto atualizado' });
       setEditOpen(false);
     } catch (e) {
@@ -791,78 +695,28 @@ export default function ProductsList() {
             <TableHead>
               <TableRow>
                 <TableCell width="40"></TableCell>
-                <TableCell sortDirection={orderBy === 'sku' ? order : false}>
-                  <TableSortLabel
-                    active={orderBy === 'sku'}
-                    direction={orderBy === 'sku' ? order : 'asc'}
-                    onClick={() => handleRequestSort('sku')}
-                  >
-                    SKU
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sortDirection={orderBy === 'name' ? order : false}>
-                  <TableSortLabel
-                    active={orderBy === 'name'}
-                    direction={orderBy === 'name' ? order : 'asc'}
-                    onClick={() => handleRequestSort('name')}
-                  >
-                    Nome
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell align="right" sortDirection={orderBy === 'cost' ? order : false}>
-                  <TableSortLabel
-                    active={orderBy === 'cost'}
-                    direction={orderBy === 'cost' ? order : 'asc'}
-                    onClick={() => handleRequestSort('cost')}
-                  >
-                    Custo (NFe)
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell align="right">Custo Manual</TableCell>
-                <TableCell align="right">Imposto/Unid.</TableCell>
-                <TableCell align="right">Custo Final</TableCell>
+                <TableCell>SKU</TableCell>
+                <TableCell>Nome</TableCell>
+                <TableCell align="right">Custo Atual</TableCell>
+                <TableCell align="right">Custo/Unidade</TableCell>
+                <TableCell align="right">Imposto (R$)</TableCell>
                 <TableCell align="center">Lotes</TableCell>
-                <TableCell align="right" sortDirection={orderBy === 'stock' ? order : false}>
-                  <TableSortLabel
-                    active={orderBy === 'stock'}
-                    direction={orderBy === 'stock' ? order : 'asc'}
-                    onClick={() => handleRequestSort('stock')}
-                  >
-                    Estoque Total
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sortDirection={orderBy === 'createdAt' ? order : false}>
-                  <TableSortLabel
-                    active={orderBy === 'createdAt'}
-                    direction={orderBy === 'createdAt' ? order : 'asc'}
-                    onClick={() => handleRequestSort('createdAt')}
-                  >
-                    Criado em
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sortDirection={orderBy === 'lastPurchase' ? order : false}>
-                  <TableSortLabel
-                    active={orderBy === 'lastPurchase'}
-                    direction={orderBy === 'lastPurchase' ? order : 'asc'}
-                    onClick={() => handleRequestSort('lastPurchase')}
-                  >
-                    Última Compra
-                  </TableSortLabel>
-                </TableCell>
+                <TableCell align="right">Estoque Total</TableCell>
+                <TableCell>Criado em</TableCell>
                 <TableCell align="center">Ações</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading && (
-                <TableRow><TableCell colSpan={12} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} align="center"><CircularProgress size={24} /></TableCell></TableRow>
               )}
               {error && !loading && (
-                <TableRow><TableCell colSpan={12} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} align="center"><Typography color="error.main">{error}</Typography></TableCell></TableRow>
               )}
-              {!loading && !error && sortedFiltered.length === 0 && (
-                <TableRow><TableCell colSpan={12} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
+              {!loading && !error && filtered.length === 0 && (
+                <TableRow><TableCell colSpan={10} align="center"><Typography variant="body2" color="text.secondary">Nenhum produto encontrado</Typography></TableCell></TableRow>
               )}
-              {!loading && !error && sortedFiltered.map((p) => {
+              {!loading && !error && filtered.map((p) => {
                 const isExpanded = expandedRows.has(p.sku);
                 const isLoadingDetails = loadingDetails.has(p.sku);
                 const fmtBRL = (v) => v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
@@ -872,21 +726,19 @@ export default function ProductsList() {
                 const costLots = p.costLots || [];
                 
                 // Dados de custo (usando nomes corretos da API)
-                const unitCostNfe = currentCost.unitCost ?? currentCost.price ?? 0;
-                const unitCostManual = p.cost;
-                const taxPerUnit = currentCost.taxPerUnit ?? currentCost.taxPaid ?? 0;        // Imposto por unidade
-                const costPerUnit = unitCostManual != null ? (unitCostManual + taxPerUnit) : (currentCost.costPerUnit ?? currentCost.unitCost ?? 0); // Custo total por unidade
-
+                const unitCost = currentCost.unitCost || 0;           // Preço de compra
+                const taxPerUnit = currentCost.taxPerUnit || 0;        // Imposto por unidade
+                const costPerUnit = currentCost.costPerUnit || 0;      // Custo total por unidade
                 const totalStock = currentCost.quantityAvailable || 0; // Estoque total
                 const lotsCount = p.totalLots || costLots.length || 0; // Total de lotes
-
+                
                 return (
                   <React.Fragment key={p.sku || p.uuid}>
                     <TableRow hover>
                       <TableCell>
-                        <IconButton
-                          size="small"
-                          onClick={() => toggleRow(p.sku)}
+                        <IconButton 
+                          size="small" 
+                          onClick={() => toggleRow(p.sku)} 
                           disabled={lotsCount === 0 || isLoadingDetails}
                         >
                           {isLoadingDetails ? <CircularProgress size={16} /> : (isExpanded ? <UpOutlined /> : <DownOutlined />)}
@@ -897,23 +749,18 @@ export default function ProductsList() {
                         <Typography variant="body2">{p.name || '-'}</Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Typography variant="body2" color="text.secondary">
-                          {unitCostNfe ? fmtBRL(unitCostNfe) : '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" color={unitCostManual != null ? "warning.main" : "text.secondary"} fontWeight={unitCostManual != null ? "medium" : "regular"}>
-                          {unitCostManual != null ? fmtBRL(unitCostManual) : '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" color="text.secondary">
-                          {taxPerUnit ? fmtBRL(taxPerUnit) : '-'}
+                        <Typography variant="body2" fontWeight="medium">
+                          {fmtBRL(unitCost)}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body2" color="primary.main" fontWeight="bold">
                           {fmtBRL(costPerUnit)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="text.secondary">
+                          {fmtBRL(taxPerUnit)}
                         </Typography>
                       </TableCell>
                       <TableCell align="center">
@@ -940,11 +787,6 @@ export default function ProductsList() {
                           {p.createdAt ? dayjs(p.createdAt).format('DD/MM/YYYY') : '-'}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="caption">
-                          {p.lastPurchaseDate ? dayjs(p.lastPurchaseDate).format('DD/MM/YYYY') : '-'}
-                        </Typography>
-                      </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" spacing={0.5} justifyContent="center">
                           <IconButton size="small" onClick={() => openEdit(p)} aria-label="Editar">
@@ -962,7 +804,7 @@ export default function ProductsList() {
                     {/* Linha expandida com detalhes dos lotes */}
                     {costLots.length > 0 && (
                       <TableRow>
-                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={12}>
+                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ margin: 2 }}>
                               <Typography variant="h6" gutterBottom component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1062,30 +904,10 @@ export default function ProductsList() {
             error={Boolean(editErrors.name)}
             helperText={editErrors.name}
           />
-          <TextField
-            label="Custo Manual (R$)"
-            value={editCost}
-            onChange={(e)=> setEditCost(e.target.value.replace(/[^0-9.,]/g, ''))}
-            fullWidth
-            margin="normal"
-            placeholder="Deixe em branco para usar apenas os lotes"
-            helperText="Se preenchido, será somado aos impostos ou usado prioritariamente."
-          />
           <Box sx={{ mt: 2, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
-            <Typography variant="body2" color="text.primary" gutterBottom>
-              <strong>Resumo de Custos Atuais NFe/Lotes:</strong>
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block">
-              • Custo de Compra (S/ Imposto): {Number(editNfeCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block">
-              • Impostos Atuais: + {Number(editTaxPerUnit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 'bold' }}>
-              • Custo Final pelo Lote: = {Number(editCalculatedCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              <strong>Nota:</strong> Se o custo manual for preenchido, ele assumirá o controle, será somado aos impostos, e passará a ser o Custo Final na tabela.
+            <Typography variant="caption" color="text.secondary">
+              <strong>Nota:</strong> O custo do produto é calculado automaticamente com base nos lotes de compra. 
+              Para atualizar custos, importe novas NF-e através do botão "Importar NF-e (XML)".
             </Typography>
           </Box>
         </DialogContent>

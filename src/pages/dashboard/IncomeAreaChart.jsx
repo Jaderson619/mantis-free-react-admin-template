@@ -27,13 +27,23 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
   // Process sales data when it changes
   useEffect(() => {
     if (!salesData || !Array.isArray(salesData)) {
+      console.log('⚠️ [IncomeAreaChart] salesData inválido:', salesData);
       return;
     }
 
+    console.log('📊 [IncomeAreaChart] Processando salesData:', salesData);
+
     // Extrair labels, contagem de vendas e receita do salesData
-    const labels = salesData.map(item => item.period);
-    const salesCount = salesData.map(item => item.salesCount);
-    const revenue = salesData.map(item => item.revenue);
+    // A API retorna 'sales' e não 'salesCount', e 'periodLabel' em vez de 'period'
+    const labels = salesData.map(item => item.periodLabel || item.period);
+    const salesCount = salesData.map(item => item.sales || item.salesCount || 0);
+    const revenue = salesData.map(item => item.revenue || 0);
+
+    console.log('📈 [IncomeAreaChart] Dados do gráfico:', {
+      labels,
+      salesCount,
+      revenue
+    });
 
     setChartData({
       labels,
@@ -205,6 +215,20 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
     return (
       <Box sx={{ height: 450, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Verificar se há dados para exibir
+  if (!chartData.labels || chartData.labels.length === 0) {
+    return (
+      <Box sx={{ height: 450, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2 }}>
+        <Typography variant="h6" color="text.secondary">
+          Nenhum dado disponível para o período selecionado
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Tente selecionar um período diferente ou verifique se há vendas aprovadas
+        </Typography>
       </Box>
     );
   }

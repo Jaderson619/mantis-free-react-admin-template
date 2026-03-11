@@ -22,7 +22,7 @@ import Box from '@mui/material/Box';
 import MainCard from 'components/MainCard';
 import MonthlyBarChart from './MonthlyBarChart';
 import ReportAreaChart from './ReportAreaChart';
-import UniqueVisitorCard from './UniqueVisitorCard';
+import ApprovedSalesChart from './ApprovedSalesChart';
 import SaleReportCard from './SaleReportCard';
 import OrdersTable from './OrdersTable';
 import SalesSummaryCards from './SalesSummaryCards';
@@ -100,8 +100,8 @@ export default function DashboardDefault() {
 
         {/* row 2 */}
         <Grid item xs={12} md={7} lg={8}>
-          {/* Removidas as props de data e filtros */}
-          <UniqueVisitorCard />
+          {/* Gráfico de Vendas Aprovadas - componente independente com seu próprio período */}
+          <ApprovedSalesChart />
         </Grid>
         <Grid item xs={12} md={5} lg={4}>
           <Grid container alignItems="center" justifyContent="space-between">
