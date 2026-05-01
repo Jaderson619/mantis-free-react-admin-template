@@ -475,16 +475,19 @@ export default function OrdersPage() {
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box sx={{ 
-                        backgroundImage: `url(${order.imageUrl})`, 
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        width: 60, 
-                        height: 60,
-                        mr: 1,
-                        border: '1px solid #eee',
-                        borderRadius: 1
-                      }} />
+                      <Box 
+                        component="img"
+                        src={order.imageUrl || 'https://via.placeholder.com/60'}
+                        alt="Produto"
+                        sx={{ 
+                          width: 60, 
+                          height: 60,
+                          mr: 2,
+                          border: '1px solid #eee',
+                          borderRadius: 1,
+                          objectFit: 'cover'
+                        }} 
+                      />
                       <Box>
                         <Box sx={{ 
                           display: 'inline-block',

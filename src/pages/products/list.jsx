@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText, Collapse, Tooltip, Divider } from '@mui/material';
+import { Box, Button, Chip, CircularProgress, Grid, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, TextField, Typography, Pagination, Stack, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, LinearProgress, List, ListItem, ListItemText, Collapse, Tooltip, Divider, RadioGroup, Radio, FormControlLabel, Autocomplete } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import MainCard from 'components/MainCard';
 import DialogErrorBoundary from 'components/DialogErrorBoundary';
@@ -40,8 +40,13 @@ export default function ProductsList() {
   const [editCalculatedCost, setEditCalculatedCost] = useState('');
   const [editNfeCost, setEditNfeCost] = useState('');
   const [editTaxPerUnit, setEditTaxPerUnit] = useState('');
+  const [editType, setEditType] = useState('simple');
+  const [editComponents, setEditComponents] = useState([{ sku: '', name: '', quantity: 1 }]);
   const [editSaving, setEditSaving] = useState(false);
   const [snack, setSnack] = useState({ open: false, type: 'success', msg: '' });
+  const [searchOptions, setSearchOptions] = useState([]);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [searchInputValue, setSearchInputValue] = useState('');
   const [editErrors, setEditErrors] = useState({});
   // Upload XML
   const [importOpen, setImportOpen] = useState(false);
@@ -324,7 +329,10 @@ export default function ProductsList() {
     setEditCost(product.cost || '');
     setEditCalculatedCost(costPerUnit);
     setEditNfeCost(unitCost);
-    setEditTaxPerUnit(taxPerUnit);    setEditErrors({});
+    setEditTaxPerUnit(taxPerUnit);
+    setEditType(product.type || 'simple');
+    setEditComponents(product.components?.length > 0 ? product.components : [{ sku: '', name: '', quantity: 1 }]);
+    setEditErrors({});
     setEditOpen(true);
   };
 
@@ -336,6 +344,16 @@ export default function ProductsList() {
   const validateEdit = () => {
     const errs = {};
     if (!editName.trim()) errs.name = 'Nome obrigatório';
+    if (editType === 'combo') {
+      if (editComponents.length === 0) {
+        errs.components = 'Adicione pelo menos um componente ao combo';
+      } else {
+        editComponents.forEach((comp, idx) => {
+          if (!comp.sku?.trim()) errs[`comp_${idx}_sku`] = 'Informe o SKU';
+          if (!comp.quantity || comp.quantity <= 0) errs[`comp_${idx}_qtd`] = 'Qtd > 0';
+        });
+      }
+    }
     setEditErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -344,11 +362,20 @@ export default function ProductsList() {
     if (!validateEdit()) return;
     setEditSaving(true);
     try {
-      // Enviamos manualCost ou cost, substituindo o que for necessário. Se for string vazia, enviamos null para manter só o calculado.
       const payload = { 
         name: editName.trim(),
-        cost: editCost !== '' ? Number(String(editCost).replace(',', '.')) : null
+        type: editType
       };
+      
+      if (editType === 'simple') {
+        payload.cost = editCost !== '' ? Number(String(editCost).replace(',', '.')) : null;
+      } else {
+        payload.components = editComponents.map(c => ({
+          sku: c.sku.trim(),
+          quantity: Number(c.quantity)
+        }));
+      }
+
       await axios.patch(`http://localhost:5001/api/products/${encodeURIComponent(editSku)}`, payload, { headers: { ...getAuthHeaders() } });
       // Atualizar localmente sem refetch completo
       setProducts(prev => prev.map(p => {
@@ -356,7 +383,9 @@ export default function ProductsList() {
           return { 
             ...p, 
             name: payload.name, 
-            cost: payload.cost,
+            type: payload.type,
+            cost: payload.cost !== undefined ? payload.cost : p.cost,
+            components: payload.components !== undefined ? payload.components : p.components,
             updatedAt: new Date().toISOString() 
           };
         }
@@ -746,6 +775,43 @@ export default function ProductsList() {
     }, 0);
   };
 
+  const handleAddEditComponent = () => {
+    setEditComponents([...editComponents, { sku: '', name: '', quantity: 1 }]);
+  };
+
+  const handleRemoveEditComponent = (index) => {
+    const newComps = [...editComponents];
+    newComps.splice(index, 1);
+    setEditComponents(newComps);
+  };
+
+  const handleEditComponentChange = (index, field, value) => {
+    const newComps = [...editComponents];
+    newComps[index][field] = value;
+    setEditComponents(newComps);
+  };
+
+  // Efeito para busca no Autocomplete de Componentes
+  useEffect(() => {
+    if (!searchInputValue || searchInputValue.length < 2) {
+      setSearchOptions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setLoadingSearch(true);
+      try {
+        const response = await axios.get(`http://localhost:5001/api/products?search=${encodeURIComponent(searchInputValue)}&limit=15`, { headers: { ...getAuthHeaders() } });
+        const items = response.data?.data?.items || [];
+        setSearchOptions(items.filter(item => item.type === 'simple')); // Combos só podem ser compostos por produtos simples
+      } catch (err) {
+        console.error('Erro na busca de produtos:', err);
+      } finally {
+        setLoadingSearch(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInputValue]);
+
   return (
   <MainCard title={`Total de SKUs cadastrados: ${total}`}
       secondary={<Button variant="contained" color="success" startIcon={<AddOutlined />} onClick={() => navigate('/produtos/novo')}>Cadastrar Novo</Button>}
@@ -862,12 +928,14 @@ export default function ProductsList() {
                 const currentCost = p.currentCost || {};
                 const costLots = p.costLots || [];
                 
-                // Dados de custo (usando nomes corretos da API)
-                const unitCostNfe = currentCost.unitCost ?? currentCost.price ?? 0;
+                // Se for combo, as propriedades dinâmicas vêm direto na raiz ou no currentCost
+                // Para não exibir 0 ou null onde já sabemos que tem valor
+                const isCombo = p.type === 'combo';
+                const unitCostNfe = isCombo ? '-' : (currentCost.unitCost ?? currentCost.price ?? 0);
                 const unitCostManual = p.cost;
-                const costPerUnit = unitCostManual != null ? unitCostManual : (currentCost.costPerUnit ?? currentCost.unitCost ?? 0); // Custo total por unidade
+                const costPerUnit = unitCostManual != null ? unitCostManual : (currentCost.costPerUnit ?? currentCost.unitCost ?? p.costPrice ?? 0); // Custo total por unidade
 
-                const totalStock = currentCost.quantityAvailable || 0; // Estoque total
+                const totalStock = p.quantityAvailable ?? currentCost.quantityAvailable ?? 0; // Estoque total, priorizando a raiz (que o combo usa)
                 const lotsCount = p.totalLots || costLots.length || 0; // Total de lotes
 
                 return (
@@ -884,11 +952,20 @@ export default function ProductsList() {
                       </TableCell>
                       <TableCell>{p.sku}</TableCell>
                       <TableCell>
-                        <Typography variant="body2">{p.name || '-'}</Typography>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Typography variant="body2">{p.name || '-'}</Typography>
+                          {isCombo && (
+                            <Chip 
+                              label="📦 Kit/Combo" 
+                              size="small" 
+                              sx={{ bgcolor: 'warning.lighter', color: 'warning.dark', fontWeight: 'bold', fontSize: '0.65rem', height: 20 }} 
+                            />
+                          )}
+                        </Stack>
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body2" color="text.secondary">
-                          {unitCostNfe ? fmtBRL(unitCostNfe) : '-'}
+                          {isCombo ? '-' : (unitCostNfe ? fmtBRL(unitCostNfe) : '-')}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
@@ -1059,29 +1136,122 @@ export default function ProductsList() {
             error={Boolean(editErrors.name)}
             helperText={editErrors.name}
           />
-          <TextField
-            label="Custo Manual (R$)"
-            value={editCost}
-            onChange={(e)=> setEditCost(e.target.value.replace(/[^0-9.,]/g, ''))}
-            fullWidth
-            margin="normal"
-            placeholder="Deixe em branco para usar apenas os lotes"
-            helperText="Se preenchido, será somado aos impostos ou usado prioritariamente."
-          />
-          <Box sx={{ mt: 2, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
-            <Typography variant="body2" color="text.primary" gutterBottom>
-              <strong>Resumo de Custos Atuais NFe/Lotes:</strong>
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block">
-              • Custo de Compra (Base): {Number(editNfeCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 'bold' }}>
-              • Custo Final pelo Lote: = {Number(editCalculatedCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              <strong>Nota:</strong> Se o custo manual for preenchido, ele assumirá o controle e passará a ser o Custo Final na tabela.
-            </Typography>
+          
+          <Box sx={{ mt: 2, mb: 1 }}>
+            <Typography variant="subtitle2" gutterBottom>Tipo de Produto</Typography>
+            <RadioGroup
+              row
+              value={editType}
+              onChange={(e) => setEditType(e.target.value)}
+            >
+              <FormControlLabel value="simple" control={<Radio size="small" />} label="Simples" />
+              <FormControlLabel value="combo" control={<Radio size="small" />} label="Kit/Combo" />
+            </RadioGroup>
           </Box>
+
+          {editType === 'simple' && (
+            <>
+              <TextField
+                label="Custo Manual (R$)"
+                value={editCost}
+                onChange={(e)=> setEditCost(e.target.value.replace(/[^0-9.,]/g, ''))}
+                fullWidth
+                margin="normal"
+                placeholder="Deixe em branco para usar apenas os lotes"
+                helperText="Se preenchido, será somado aos impostos ou usado prioritariamente."
+              />
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.primary" gutterBottom>
+                  <strong>Resumo de Custos Atuais NFe/Lotes:</strong>
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  • Custo de Compra (Base): {Number(editNfeCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 'bold' }}>
+                  • Custo Final pelo Lote: = {Number(editCalculatedCost || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  <strong>Nota:</strong> Se o custo manual for preenchido, ele assumirá o controle e passará a ser o Custo Final na tabela.
+                </Typography>
+              </Box>
+            </>
+          )}
+
+          {editType === 'combo' && (
+            <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: 'grey.50' }}>
+              <Typography variant="subtitle2" gutterBottom>Componentes do Combo</Typography>
+              {editErrors.components && (
+                <Typography color="error" variant="caption" display="block" mb={2}>
+                  {editErrors.components}
+                </Typography>
+              )}
+              {editComponents.map((comp, idx) => (
+                <Grid container spacing={1} key={idx} alignItems="center" sx={{ mb: 1 }}>
+                  <Grid item xs={7}>
+                    <Autocomplete
+                      size="small"
+                      options={searchOptions}
+                      getOptionLabel={(option) => `${option.sku} - ${option.name}`}
+                      filterOptions={(x) => x} // Backend já filtra
+                      loading={loadingSearch}
+                      value={comp.sku ? { sku: comp.sku, name: comp.name || '' } : null}
+                      isOptionEqualToValue={(option, value) => option.sku === value.sku}
+                      onInputChange={(e, newInputValue) => {
+                        setSearchInputValue(newInputValue);
+                      }}
+                      onChange={(e, newValue) => {
+                        if (newValue) {
+                          handleEditComponentChange(idx, 'sku', newValue.sku);
+                          handleEditComponentChange(idx, 'name', newValue.name);
+                        } else {
+                          handleEditComponentChange(idx, 'sku', '');
+                          handleEditComponentChange(idx, 'name', '');
+                        }
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label={`Produto ${idx + 1}`}
+                          error={Boolean(editErrors[`comp_${idx}_sku`])}
+                          helperText={editErrors[`comp_${idx}_sku`]}
+                          InputProps={{
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {loadingSearch ? <CircularProgress color="inherit" size={20} /> : null}
+                                {params.InputProps.endAdornment}
+                              </>
+                            )
+                          }}
+                        />
+                      )}
+                    />
+                  </Grid>
+                  <Grid item xs={3}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      type="number"
+                      label="Qtd"
+                      value={comp.quantity}
+                      onChange={(e) => handleEditComponentChange(idx, 'quantity', Number(e.target.value))}
+                      inputProps={{ min: 1 }}
+                      error={Boolean(editErrors[`comp_${idx}_qtd`])}
+                      helperText={editErrors[`comp_${idx}_qtd`]}
+                    />
+                  </Grid>
+                  <Grid item xs={2}>
+                    <IconButton color="error" onClick={() => handleRemoveEditComponent(idx)} disabled={editComponents.length === 1} size="small">
+                      <DeleteOutlined fontSize="small" />
+                    </IconButton>
+                  </Grid>
+                </Grid>
+              ))}
+              <Button variant="outlined" size="small" startIcon={<AddOutlined />} onClick={handleAddEditComponent} sx={{ mt: 1 }}>
+                Adicionar Componente
+              </Button>
+            </Paper>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={closeEdit} disabled={editSaving}>Cancelar</Button>

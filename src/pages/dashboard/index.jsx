@@ -1,6 +1,7 @@
 // react
 import React, { useState } from 'react';
 import dayjs from 'dayjs';
+import 'dayjs/locale/pt-br';
 
 // material-ui
 import Avatar from '@mui/material/Avatar';
@@ -67,7 +68,7 @@ export default function DashboardDefault() {
     setApplyFilter((prev) => !prev); // Altera o estado para forçar a atualização
   };
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
+    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
       <Grid container rowSpacing={4.5} columnSpacing={2.75}>
         {/* row 1 */}
         <Grid item xs={12} sx={{ mb: -2.25 }}>
@@ -77,6 +78,7 @@ export default function DashboardDefault() {
         <Grid item xs={12} md={6} lg={4}>
           <DesktopDatePicker
             label="Data de Início"
+            format="DD/MM/YYYY"
             value={startDate}
             onChange={(newValue) => { if (newValue) { setStartDate(newValue.startOf('day')); } }}
           />
@@ -84,6 +86,7 @@ export default function DashboardDefault() {
         <Grid item xs={12} md={6} lg={4}>
           <DesktopDatePicker
             label="Data de Fim"
+            format="DD/MM/YYYY"
             value={endDate}
             onChange={(newValue) => { if (newValue) { setEndDate(newValue.endOf('day')); } }}
           />

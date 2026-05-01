@@ -1,16 +1,24 @@
 import React, { useState } from 'react';
-import { Box, Grid, TextField, Button, Typography, Paper, InputAdornment, FormControlLabel, Checkbox, Divider } from '@mui/material';
+import { Box, Grid, TextField, Button, Typography, Paper, InputAdornment, FormControlLabel, Checkbox, Divider, RadioGroup, Radio, IconButton } from '@mui/material';
+import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
+import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import MainCard from 'components/MainCard';
 import dayjs from 'dayjs';
 import axios from 'axios';
 
 export default function ProductCreate() {
+  const [productType, setProductType] = useState('simple'); // 'simple' ou 'combo'
   const [sku, setSku] = useState('');
+  const [name, setName] = useState('');
   const [cost, setCost] = useState('');
   const [taxPercent, setTaxPercent] = useState('');
   const [stockFixed, setStockFixed] = useState(false);
   const [stockQuantity, setStockQuantity] = useState(1);
   const [gtin, setGtin] = useState('');
+  
+  // Componentes do Combo
+  const [components, setComponents] = useState([{ sku: '', quantity: 1 }]);
+
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState({});
@@ -29,12 +37,26 @@ export default function ProductCreate() {
       newErrors.sku = 'Use apenas letras, números, ponto, hífen ou _ (2-50)';
     }
 
-    // Custo obrigatório e > 0
-    const costVal = parseCurrency(cost);
-    if (!cost || isNaN(costVal)) {
-      newErrors.cost = 'Informe o custo';
-    } else if (costVal <= 0) {
-      newErrors.cost = 'Custo deve ser > 0';
+    // Custo obrigatório apenas para produtos simples
+    if (productType === 'simple') {
+      const costVal = parseCurrency(cost);
+      if (!cost || isNaN(costVal)) {
+        newErrors.cost = 'Informe o custo';
+      } else if (costVal <= 0) {
+        newErrors.cost = 'Custo deve ser > 0';
+      }
+    }
+
+    // Validação de componentes se for combo
+    if (productType === 'combo') {
+      if (components.length === 0) {
+        newErrors.components = 'Adicione pelo menos um componente ao combo';
+      } else {
+        components.forEach((comp, idx) => {
+          if (!comp.sku.trim()) newErrors[`comp_${idx}_sku`] = 'Informe o SKU';
+          if (comp.quantity <= 0) newErrors[`comp_${idx}_qtd`] = 'Qtd > 0';
+        });
+      }
     }
 
     // Imposto opcional: se informado, 0-100
@@ -73,22 +95,36 @@ export default function ProductCreate() {
     try {
       const payload = {
         sku: sku.trim(),
-        cost: parseCurrency(cost),
+        name: name.trim() || 'Produto sem nome',
+        type: productType,
         taxPercent: taxPercent ? Number(taxPercent) : null,
         gtin: gtin.trim() || null,
-        stock: stockFixed ? Number(stockQuantity) : null,
-        stockFixed,
         createdAt: dayjs().toISOString()
       };
+
+      if (productType === 'simple') {
+        payload.cost = parseCurrency(cost);
+        payload.stock = stockFixed ? Number(stockQuantity) : null;
+        payload.stockFixed = stockFixed;
+      } else {
+        payload.components = components.map(c => ({
+          sku: c.sku.trim(),
+          quantity: Number(c.quantity)
+        }));
+      }
+
       // Ajustar para endpoint real quando existir
       await axios.post('http://localhost:5001/api/products', payload);
       setMessage({ type: 'success', text: 'Produto cadastrado com sucesso!' });
       setSku('');
+      setName('');
       setCost('');
       setTaxPercent('');
       setGtin('');
       setStockQuantity(1);
       setStockFixed(false);
+      setProductType('simple');
+      setComponents([{ sku: '', quantity: 1 }]);
     } catch (err) {
       console.error(err);
       setMessage({ type: 'error', text: 'Erro ao cadastrar produto.' });
@@ -97,12 +133,45 @@ export default function ProductCreate() {
     }
   };
 
+  const handleAddComponent = () => {
+    setComponents([...components, { sku: '', quantity: 1 }]);
+  };
+
+  const handleRemoveComponent = (index) => {
+    const newComps = [...components];
+    newComps.splice(index, 1);
+    setComponents(newComps);
+  };
+
+  const handleComponentChange = (index, field, value) => {
+    const newComps = [...components];
+    newComps[index][field] = value;
+    setComponents(newComps);
+  };
+
   return (
     <MainCard title="Cadastrar Novo Produto (SKU)">
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Typography variant="subtitle1" gutterBottom>Tipo de Produto</Typography>
+            <RadioGroup
+              row
+              value={productType}
+              onChange={(e) => setProductType(e.target.value)}
+            >
+              <FormControlLabel value="simple" control={<Radio />} label="Produto Simples" />
+              <FormControlLabel value="combo" control={<Radio />} label="Kit / Combo (Composto por outros produtos)" />
+            </RadioGroup>
+            {productType === 'combo' && (
+              <Typography variant="caption" color="text.secondary">
+                O custo e estoque de Kits/Combos são calculados automaticamente com base em seus componentes.
+              </Typography>
+            )}
+          </Grid>
+          
           <Grid item xs={12} md={4}>
-            <Typography variant="subtitle1" gutterBottom>Custos e Impostos</Typography>
+            <Typography variant="subtitle1" gutterBottom>Dados do Produto</Typography>
             <TextField
               label="SKU"
               value={sku}
@@ -114,16 +183,26 @@ export default function ProductCreate() {
               helperText={errors.sku}
             />
             <TextField
-              label="Custo (R$)"
-              value={cost}
-              onChange={(e) => setCost(e.target.value.replace(/[^0-9.,]/g, ''))}
+              label="Nome do Produto"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               fullWidth
-              required
               margin="normal"
-              InputProps={{ startAdornment: <InputAdornment position="start">R$</InputAdornment> }}
-              error={Boolean(errors.cost)}
-              helperText={errors.cost}
             />
+            
+            {productType === 'simple' && (
+              <TextField
+                label="Custo Inicial (R$)"
+                value={cost}
+                onChange={(e) => setCost(e.target.value.replace(/[^0-9.,]/g, ''))}
+                fullWidth
+                required
+                margin="normal"
+                InputProps={{ startAdornment: <InputAdornment position="start">R$</InputAdornment> }}
+                error={Boolean(errors.cost)}
+                helperText={errors.cost}
+              />
+            )}
             <TextField
               label="Imposto (%)"
               value={taxPercent}
@@ -145,37 +224,96 @@ export default function ProductCreate() {
               helperText={errors.gtin}
             />
           </Grid>
-          <Grid item xs={12} md={4}>
-            <Typography variant="subtitle1" gutterBottom>Estoque Fixo</Typography>
-            <FormControlLabel
-              control={<Checkbox checked={stockFixed} onChange={(e) => setStockFixed(e.target.checked)} />}
-              label="Sim, quero manter o estoque deste SKU fixo"
-            />
-            <TextField
-              label="Manter estoque em"
-              type="number"
-              value={stockQuantity}
-              onChange={(e) => setStockQuantity(e.target.value)}
-              fullWidth
-              disabled={!stockFixed}
-              margin="normal"
-              inputProps={{ min: 0 }}
-              error={Boolean(errors.stockQuantity)}
-              helperText={errors.stockQuantity}
-            />
-            <Paper variant="outlined" sx={{ p:2, mt:2, bgcolor:'warning.lighter' }}>
-              <Typography variant="caption" display="block" fontWeight={600}>Atenção:</Typography>
-              <Typography variant="caption" display="block">
-                Você não poderá ter Estoque Fixo e Sincronização de Estoque ativos ao mesmo tempo. Estoque fixo possui prioridade sobre a sincronização de estoque.
-              </Typography>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Typography variant="subtitle1" gutterBottom>Sincronização de Estoque</Typography>
-            <FormControlLabel
-              control={<Checkbox disabled={stockFixed} />}
-              label="Não automatizar a sincronização de baixa de estoque neste produto."
-            />
+
+          {productType === 'simple' && (
+            <Grid item xs={12} md={4}>
+              <Typography variant="subtitle1" gutterBottom>Estoque Fixo</Typography>
+              <FormControlLabel
+                control={<Checkbox checked={stockFixed} onChange={(e) => setStockFixed(e.target.checked)} />}
+                label="Sim, quero manter o estoque deste SKU fixo"
+              />
+              <TextField
+                label="Manter estoque em"
+                type="number"
+                value={stockQuantity}
+                onChange={(e) => setStockQuantity(e.target.value)}
+                fullWidth
+                disabled={!stockFixed}
+                margin="normal"
+                inputProps={{ min: 0 }}
+                error={Boolean(errors.stockQuantity)}
+                helperText={errors.stockQuantity}
+              />
+              <Paper variant="outlined" sx={{ p:2, mt:2, bgcolor:'warning.lighter' }}>
+                <Typography variant="caption" display="block" fontWeight={600}>Atenção:</Typography>
+                <Typography variant="caption" display="block">
+                  Você não poderá ter Estoque Fixo e Sincronização de Estoque ativos ao mesmo tempo. Estoque fixo possui prioridade sobre a sincronização de estoque.
+                </Typography>
+              </Paper>
+            </Grid>
+          )}
+
+          {productType === 'combo' && (
+            <Grid item xs={12} md={8}>
+              <Typography variant="subtitle1" gutterBottom>Componentes do Combo</Typography>
+              <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                {errors.components && (
+                  <Typography color="error" variant="caption" display="block" mb={2}>
+                    {errors.components}
+                  </Typography>
+                )}
+                {components.map((comp, idx) => (
+                  <Grid container spacing={2} key={idx} alignItems="center" sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={8}>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        label={`SKU do Produto ${idx + 1}`}
+                        value={comp.sku}
+                        onChange={(e) => handleComponentChange(idx, 'sku', e.target.value)}
+                        error={Boolean(errors[`comp_${idx}_sku`])}
+                        helperText={errors[`comp_${idx}_sku`]}
+                        placeholder="Ex: 83794Z-b"
+                      />
+                    </Grid>
+                    <Grid item xs={4} sm={3}>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        type="number"
+                        label="Quantidade"
+                        value={comp.quantity}
+                        onChange={(e) => handleComponentChange(idx, 'quantity', Number(e.target.value))}
+                        inputProps={{ min: 1 }}
+                        error={Boolean(errors[`comp_${idx}_qtd`])}
+                        helperText={errors[`comp_${idx}_qtd`]}
+                      />
+                    </Grid>
+                    <Grid item xs={2} sm={1}>
+                      <IconButton color="error" onClick={() => handleRemoveComponent(idx)} disabled={components.length === 1}>
+                        <DeleteOutlined />
+                      </IconButton>
+                    </Grid>
+                  </Grid>
+                ))}
+                <Button variant="outlined" size="small" startIcon={<PlusOutlined />} onClick={handleAddComponent}>
+                  Adicionar Componente
+                </Button>
+              </Paper>
+            </Grid>
+          )}
+
+          {productType === 'simple' && (
+            <Grid item xs={12} md={4}>
+              <Typography variant="subtitle1" gutterBottom>Sincronização de Estoque</Typography>
+              <FormControlLabel
+                control={<Checkbox disabled={stockFixed} />}
+                label="Não automatizar a sincronização de baixa de estoque neste produto."
+              />
+            </Grid>
+          )}
+
+          <Grid item xs={12}>
             <Divider sx={{ my:2 }} />
             {message && (
               <Typography color={message.type === 'error' ? 'error.main' : 'success.main'} variant="body2">
@@ -186,7 +324,7 @@ export default function ProductCreate() {
               <Button type="submit" variant="contained" disabled={saving}>Salvar</Button>
               <Button type="submit" variant="outlined" disabled={saving}>Salvar e Fechar</Button>
               <Button type="button" variant="contained" color="warning" disabled={saving}
-                onClick={() => { setSku(''); setCost(''); setTaxPercent(''); setGtin(''); setStockQuantity(1); setStockFixed(false); }}
+                onClick={() => { setSku(''); setName(''); setCost(''); setTaxPercent(''); setGtin(''); setStockQuantity(1); setStockFixed(false); setProductType('simple'); setComponents([{sku:'', quantity:1}]); }}
               >Fechar</Button>
             </Box>
           </Grid>

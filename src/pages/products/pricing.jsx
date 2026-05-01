@@ -177,14 +177,21 @@ export default function PricingPage() {
           if (productData) {
             setProductData(productData);
 
-            // Preenche o custo base do produto se existir
-            const currentCost = productData.currentCost || {};
-            // Tenta usar o custo manual do produto se houver, caso contrário, usa o custo base (unitCost sem imposto) ou o costPerUnit anterior
-            const baseCost =
-              productData.cost != null ? productData.cost : currentCost.unitCost || currentCost.costPerUnit || currentCost.price || 0;
+            // Se for combo, exibe os componentes e calcula o custo dinâmico
+            if (productData.type === 'combo') {
+              // Já calculamos no backend, ou fallback caso não tenha
+              const comboCost = productData.costPrice || productData.currentCost?.unitCost || 0;
+              setCost(String(comboCost));
+            } else {
+              // Preenche o custo base do produto se existir
+              const currentCost = productData.currentCost || {};
+              // Tenta usar o custo manual do produto se houver, caso contrário, usa o custo base (unitCost sem imposto) ou o costPerUnit anterior
+              const baseCost =
+                productData.cost != null ? productData.cost : currentCost.unitCost || currentCost.costPerUnit || currentCost.price || 0;
 
-            if (baseCost !== null && baseCost !== undefined) {
-              setCost(String(baseCost));
+              if (baseCost !== null && baseCost !== undefined) {
+                setCost(String(baseCost));
+              }
             }
           }
         } catch (error) {
@@ -380,49 +387,79 @@ export default function PricingPage() {
               )}
               <MainCard sx={{ mb: 2 }}>
                 <Autocomplete
-                  options={searchOptions}
-                  getOptionLabel={(option) => `${option.sku} - ${option.name}`}
-                  filterOptions={(x) => x}
-                  loading={loadingSearch}
-                  value={productData || null}
-                  isOptionEqualToValue={(option, value) => option.sku === value.sku}
-                  onInputChange={(e, newInputValue) => setSearchInputValue(newInputValue)}
-                  onChange={(e, newValue) => {
-                    if (newValue) {
-                      setSearchParams({ sku: newValue.sku });
-                    } else {
-                      setSearchParams({});
-                      setProductData(null);
-                      setCost('');
-                    }
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Selecione ou busque um produto para auto-preencher"
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {loadingSearch ? <CircularProgress color="inherit" size={20} /> : null}
-                            {params.InputProps.endAdornment}
-                          </>
-                        )
-                      }}
-                    />
+                    options={searchOptions}
+                    getOptionLabel={(option) => `${option.sku} - ${option.name}`}
+                    filterOptions={(x) => x}
+                    loading={loadingSearch}
+                    value={productData || null}
+                    isOptionEqualToValue={(option, value) => option.sku === value.sku}
+                    onInputChange={(e, newInputValue) => setSearchInputValue(newInputValue)}
+                    onChange={(e, newValue) => {
+                      if (newValue) {
+                        setSearchParams({ sku: newValue.sku });
+                      } else {
+                        setSearchParams({});
+                        setProductData(null);
+                        setCost('');
+                      }
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Selecione ou busque um produto para auto-preencher"
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {loadingSearch ? <CircularProgress color="inherit" size={20} /> : null}
+                              {params.InputProps.endAdornment}
+                            </>
+                          )
+                        }}
+                      />
+                    )}
+                  />
+                  {productData && (
+                    <Box sx={{ mt: 2 }}>
+                      <Stack direction="row" alignItems="center" spacing={1}>
+                        <Typography variant="subtitle1" color="primary.main">
+                          Produto Vinculado: <strong>{productData.sku} - {productData.name}</strong>
+                        </Typography>
+                        {productData.type === 'combo' && (
+                          <Box sx={{
+                            bgcolor: 'warning.light',
+                            color: 'warning.dark',
+                            px: 1,
+                            py: 0.25,
+                            borderRadius: 1,
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold'
+                          }}>
+                            📦 Kit/Combo
+                          </Box>
+                        )}
+                      </Stack>
+                      
+                      {productData.type === 'combo' && productData.components && (
+                        <Box sx={{ mt: 1, p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px dashed', borderColor: 'grey.300' }}>
+                          <Typography variant="caption" fontWeight="bold" color="textSecondary" gutterBottom>
+                            Componentes deste Combo (Custo Total: {fmtBRL(cost)}):
+                          </Typography>
+                          <ul style={{ margin: 0, paddingLeft: 20 }}>
+                            {productData.components.map((comp, idx) => (
+                              <li key={idx}>
+                                <Typography variant="caption">
+                                  {comp.quantity}x {comp.sku} ({fmtBRL(comp.cost)})
+                                </Typography>
+                              </li>
+                            ))}
+                          </ul>
+                        </Box>
+                      )}
+                    </Box>
                   )}
-                />
-                {productData && (
-                  <Typography variant="subtitle1" color="primary.main" sx={{ mt: 2 }}>
-                    Produto Vinculado:{' '}
-                    <strong>
-                      {productData.sku} - {productData.name}
-                    </strong>
-                  </Typography>
-                )}
-              </MainCard>
-            </Grid>
-
+                </MainCard>
+              </Grid>
             {/* Coluna Esquerda: Configurações */}
             <Grid item xs={12} md={7}>
               <Stack spacing={3}>
