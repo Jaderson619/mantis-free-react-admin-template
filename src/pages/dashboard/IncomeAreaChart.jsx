@@ -10,7 +10,7 @@ import ReactApexChart from 'react-apexcharts';
 
 // ==============================|| INCOME AREA CHART ||============================== //
 
-export default function IncomeAreaChart({ period, includeFrete, salesData }) {
+export default function IncomeAreaChart({ period, includeFrete, salesData, activeMetricsList }) {
   const theme = useTheme();
   const { primary, secondary } = theme.palette.text;
   const line = theme.palette.divider;
@@ -33,22 +33,19 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
 
     console.log('📊 [IncomeAreaChart] Processando salesData:', salesData);
 
-    // Extrair labels, contagem de vendas e receita do salesData
-    // A API retorna 'sales' e não 'salesCount', e 'periodLabel' em vez de 'period'
-    const labels = salesData.map(item => item.periodLabel || item.period);
-    const salesCount = salesData.map(item => item.sales || item.salesCount || 0);
-    const revenue = salesData.map(item => item.revenue || 0);
-
-    console.log('📈 [IncomeAreaChart] Dados do gráfico:', {
-      labels,
-      salesCount,
-      revenue
-    });
-
+    // O backend reescreveu o array, a data agora se chama "date" no formato de data real ou string DD/MM.
+    const labels = salesData.map(item => item.date || item.periodLabel || item.period || item._id || 'Sem Data');
     setChartData({
       labels,
-      salesCount,
-      revenue
+      sales: salesData.map(item => item.sales || item.salesCount || item.totalQuantity || 0),
+      revenue: salesData.map(item => item.revenue || item.totalRevenue || 0),
+      grossRevenue: salesData.map(item => item.vendasBrutas || item.grossRevenue || item.revenue || 0),
+      avgPrice: salesData.map(item => item.precoMedio || item.avgPrice || (item.revenue && item.sales ? item.revenue/item.sales : 0)),
+      uniqueViews: salesData.map(item => item.visitasUnicas || item.uniqueViews || item.views || 0),
+      views: salesData.map(item => item.totalVisitas || item.views || 0),
+      uniqueBuyers: salesData.map(item => item.compradoresUnicos || item.uniqueBuyers || item.sales || 0),
+      conversion: salesData.map(item => item.conversao || item.conversionRate || item.conversion || 0),
+      grossSalesCount: salesData.map(item => item.qtdVendasBrutas || item.grossSalesCount || item.sales || 0)
     });
   }, [salesData]);
 
@@ -91,6 +88,39 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
     }
   };
 
+const ALL_METRICS = {
+    unidadesVendidas: { name: 'Unidades vendidas', type: 'line', dataKey: 'sales', isCurrency: false },
+    vendasConcluidas: { name: 'Vendas concluídas', type: 'line', dataKey: 'revenue', isCurrency: true },
+    vendasBrutas: { name: 'Vendas brutas', type: 'line', dataKey: 'grossRevenue', isCurrency: true },
+    precoMedio: { name: 'Preço médio', type: 'line', dataKey: 'avgPrice', isCurrency: true },
+    visitasUnicas: { name: 'Visitas únicas', type: 'line', dataKey: 'uniqueViews', isCurrency: false },
+    totalVisitas: { name: 'Total de visitas', type: 'line', dataKey: 'views', isCurrency: false },
+    compradoresUnicos: { name: 'Compradores únicos', type: 'line', dataKey: 'uniqueBuyers', isCurrency: false },
+    conversao: { name: 'Conversão (%)', type: 'line', dataKey: 'conversion', isCurrency: false },
+    qtdVendasBrutas: { name: 'Quantidade de vendas', type: 'line', dataKey: 'grossSalesCount', isCurrency: false }
+  };
+  
+  let activeSeriesConfigs = [];
+  if (activeMetricsList && activeMetricsList.length > 0) {
+    activeSeriesConfigs = activeMetricsList.map(id => ALL_METRICS[id]).filter(Boolean);
+  } else {
+    activeSeriesConfigs = [
+      { name: 'Número de Vendas', type: 'column', dataKey: 'sales', isCurrency: false },
+      { name: 'Receita', type: 'line', dataKey: 'revenue', isCurrency: true }
+    ];
+  }
+
+  const series = activeSeriesConfigs.map((config) => ({
+    name: config.name,
+    type: config.type,
+    data: chartData[config.dataKey] || []
+  }));
+
+  const dynamicColors = [
+    primaryMain, success, theme.palette.warning.main, theme.palette.error.main, 
+    theme.palette.info.main, theme.palette.secondary.main, '#8e44ad', '#00b894', '#d35400'
+  ];
+
   // Chart options
   const options = {
     chart: {
@@ -111,7 +141,7 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
       type: ['solid', 'solid'],
       opacity: [0.85, 1]
     },
-    colors: [primaryMain, success],
+    colors: activeSeriesConfigs.map((_, i) => dynamicColors[i % dynamicColors.length]),
     labels: chartData.labels,
     xaxis: {
       type: 'category',
@@ -122,6 +152,11 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
         },
         formatter: (value) => {
           // Formatação específica baseada no período
+          // Formatar data YYYY-MM-DD para DD/MM caso venha assim do Analytics
+          if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const [ano, mes, dia] = value.split('-');
+            return `${dia}/${mes}`;
+          }
           return value;
         }
       },
@@ -130,55 +165,42 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
         color: line
       }
     },
-    yaxis: [
-      {
-        title: {
-          text: 'Nº Vendas',
-          style: {
-            color: secondary
+    yaxis: activeSeriesConfigs.map((config, index) => ({
+      show: index <= 1,
+      opposite: index === 1,
+      labels: {
+        style: { colors: [secondary] },
+        formatter: (value) => {
+          if (!value) return 0;
+          if (config.isCurrency) {
+            if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+            return value.toFixed(0);
           }
-        },
-        labels: {
-          style: {
-            colors: [secondary]
-          }
-        }
-      },
-      {
-        opposite: true,
-        title: {
-          text: 'R$',
-          style: {
-            color: secondary
-          }
-        },
-        labels: {
-          style: {
-            colors: [secondary]
-          },
-          formatter: (value) => {
-            if (value >= 1000) {
-              return `${(value / 1000).toFixed(0)}k`;
-            }
-            return value;
-          }
+          if (config.dataKey === 'conversion') return `${value.toFixed(1)}%`;
+          return value.toFixed(0);
         }
       }
-    ],
+    })),
     tooltip: {
       shared: true,
       intersect: false,
       y: {
         formatter: (value, { seriesIndex }) => {
-          if (seriesIndex === 0) {
-            return `${value} pedidos`;
-          }
-          return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+          const config = activeSeriesConfigs[seriesIndex];
+          if (!config || value == null) return value;
+          if (config.isCurrency) return 'R$ ' + Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          if (config.dataKey === 'conversion') return Number(value).toFixed(2) + '%';
+          return value;
         }
       },
       x: {
         formatter: (value) => {
           const format = getXAxisFormat();
+          // Se o valor já vier como "YYYY-MM-DD" do banco para análise de produto
+          if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const [ano, mes, dia] = value.split('-');
+            return `${dia}/${mes}`;
+          }
           return value; // Usar formatação específica para o tooltip
         }
       }
@@ -196,20 +218,6 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
       }
     }
   };
-
-  // Chart series data
-  const series = [
-    {
-      name: 'Número de Vendas',
-      type: 'column',
-      data: chartData.salesCount
-    },
-    {
-      name: 'Receita',
-      type: 'line',
-      data: chartData.revenue
-    }
-  ];
 
   if (loading) {
     return (
@@ -252,7 +260,7 @@ export default function IncomeAreaChart({ period, includeFrete, salesData }) {
           }}
         >
           <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-            {chartData.salesCount[5] || 591} Pedidos
+            {chartData.sales[5] || 591} Pedidos
           </Typography>
         </Box>
       )}

@@ -15,6 +15,7 @@ import InfoCircleOutlined from '@ant-design/icons/InfoCircleOutlined';
 import DatabaseOutlined from '@ant-design/icons/DatabaseOutlined';
 import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
 import CalculatorOutlined from '@ant-design/icons/CalculatorOutlined';
+import FundViewOutlined from '@ant-design/icons/FundViewOutlined';
 
 export default function ProductsList() {
   const navigate = useNavigate();
@@ -931,7 +932,12 @@ export default function ProductsList() {
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" spacing={0.5} justifyContent="center">
-                          <Tooltip title="Precificar">
+                          <Tooltip title="Análise de Desempenho">
+                                <IconButton size="small" onClick={() => navigate(`/produtos/analise?sku=${encodeURIComponent(p.sku)}`)} color="primary">
+                                  <FundViewOutlined />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Precificar">
                             <IconButton size="small" onClick={() => navigate(`/produtos/precificacao?sku=${encodeURIComponent(p.sku)}`)} color="success">
                               <CalculatorOutlined />
                             </IconButton>
