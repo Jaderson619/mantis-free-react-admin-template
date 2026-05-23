@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Box, Grid, TextField, Button, Typography, Paper, InputAdornment, FormControlLabel, Checkbox, Divider, RadioGroup, Radio, IconButton } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, Grid, TextField, Button, Typography, Paper, InputAdornment, FormControlLabel, Checkbox, Divider, RadioGroup, Radio, IconButton, Autocomplete, Chip } from '@mui/material';
 import DeleteOutlined from '@ant-design/icons/DeleteOutlined';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import MainCard from 'components/MainCard';
@@ -15,6 +15,7 @@ export default function ProductCreate() {
   const [stockFixed, setStockFixed] = useState(false);
   const [stockQuantity, setStockQuantity] = useState(1);
   const [gtin, setGtin] = useState('');
+  const [aliases, setAliases] = useState([]);
   
   // Componentes do Combo
   const [components, setComponents] = useState([{ sku: '', quantity: 1 }]);
@@ -22,6 +23,22 @@ export default function ProductCreate() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState({});
+  const [availableProducts, setAvailableProducts] = useState([]);
+
+  useEffect(() => {
+    const fetchAvailableProducts = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const response = await axios.get('http://localhost:5001/api/products?limit=1000', { headers });
+        const items = response.data?.data?.items || response.data?.items || response.data || [];
+        setAvailableProducts(items);
+      } catch (err) {
+        console.error('Erro ao buscar produtos:', err);
+      }
+    };
+    fetchAvailableProducts();
+  }, []);
 
   const parseCurrency = (formatted) => {
     if (!formatted) return 0;
@@ -99,6 +116,7 @@ export default function ProductCreate() {
         type: productType,
         taxPercent: taxPercent ? Number(taxPercent) : null,
         gtin: gtin.trim() || null,
+        aliases: aliases,
         createdAt: dayjs().toISOString()
       };
 
@@ -114,13 +132,16 @@ export default function ProductCreate() {
       }
 
       // Ajustar para endpoint real quando existir
-      await axios.post('http://localhost:5001/api/products', payload);
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.post('http://localhost:5001/api/products', payload, { headers });
       setMessage({ type: 'success', text: 'Produto cadastrado com sucesso!' });
       setSku('');
       setName('');
       setCost('');
       setTaxPercent('');
       setGtin('');
+      setAliases([]);
       setStockQuantity(1);
       setStockFixed(false);
       setProductType('simple');
@@ -222,6 +243,28 @@ export default function ProductCreate() {
               placeholder="GTIN do produto"
               error={Boolean(errors.gtin)}
               helperText={errors.gtin}
+            />
+
+            <Autocomplete
+              multiple
+              freeSolo
+              options={availableProducts.map(p => p.sku)}
+              value={aliases}
+              onChange={(e, newValue) => setAliases(newValue)}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return <Chip variant="outlined" label={option} key={key} {...tagProps} />;
+                })
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  margin="normal"
+                  label="SKUs Alternativos (Marketplace/Aliases)"
+                  placeholder="Digite o SKU e pressione Enter"
+                />
+              )}
             />
           </Grid>
 
